@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import AppLayout from './layouts/AppLayout'
 import Home from './pages/Home'
 import HowItWorks from './pages/HowItWorks'
@@ -7,10 +7,12 @@ import BusinessInsights from './pages/BusinessInsights'
 import FinancialCalculator from './pages/FinancialCalculator'
 import AIAssistant from './pages/AIAssistant'
 
-export default function App() {
+function AnimatedRoutes() {
+  const location = useLocation()
+
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
+    <div key={location.pathname} className="page-transition">
+      <Routes location={location}>
         <Route path="/" element={<Home />} />
         <Route path="/how-it-works" element={<HowItWorks />} />
         <Route path="/schemes" element={<Schemes />} />
@@ -18,6 +20,16 @@ export default function App() {
         <Route path="/calculator" element={<FinancialCalculator />} />
         <Route path="/assistant" element={<AIAssistant />} />
         <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="*" element={<AnimatedRoutes />} />
       </Route>
     </Routes>
   )
