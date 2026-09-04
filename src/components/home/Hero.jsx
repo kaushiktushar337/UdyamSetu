@@ -30,7 +30,7 @@ export default function Hero() {
   {/* Farmer */}
   <div className="relative h-[330px] w-full overflow-visible">
     <img
-      src="farmer.png"
+      src="/farmer.png"
       alt="farmer"
       className="
         absolute
