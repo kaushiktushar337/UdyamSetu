@@ -21,7 +21,7 @@ export default function Navbar() {
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-udyam-50 text-lg">🌾</div>
           <div className="leading-tight">
             <div className="font-serif text-[25px] font-semibold tracking-tight text-neutral-900">UdyamSetu</div>
-            <div className="text-[12px] font-medium text-neutral-600">Sapno se saathi, safal udyam ki ore</div>
+            <div className="text-[12px] font-medium text-neutral-600">Sapno ka saathi, safal udyam ki ore</div>
           </div>
         </Link>
 
