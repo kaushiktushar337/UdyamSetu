@@ -18,8 +18,10 @@ export function calculateStructure(margin) {
     const requiredMargin = cappedProjectCost - loanAmount
     return {
       theoreticalProjectCost,
+      eligibleProjectCost: cappedProjectCost,
       loanAmount,
       requiredMargin,
+      additionalMargin: Math.max(0, requiredMargin - availableMargin),
       scheme: schemes[1],
       capped: true,
       loanPercent: 90,
@@ -27,13 +29,17 @@ export function calculateStructure(margin) {
   }
 
   const loanAmount = Math.min(loanBeforeCap, scheme.maxLoan)
+  const eligibleProjectCost = Math.min(theoreticalProjectCost, scheme.maxProjectCost)
+  const requiredMargin = eligibleProjectCost - loanAmount
 
   return {
     theoreticalProjectCost,
+    eligibleProjectCost,
     loanAmount,
-    requiredMargin: theoreticalProjectCost <= scheme.maxProjectCost ? availableMargin : theoreticalProjectCost - loanAmount,
+    requiredMargin,
+    additionalMargin: Math.max(0, requiredMargin - availableMargin),
     scheme,
     capped: loanBeforeCap > scheme.maxLoan,
-    loanPercent: Math.round((loanAmount / theoreticalProjectCost) * 100),
+    loanPercent: Math.round((loanAmount / eligibleProjectCost) * 100),
   }
 }

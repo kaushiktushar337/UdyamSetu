@@ -1,14 +1,17 @@
 import PageHeader from '../components/common/PageHeader'
 import ProcessSteps from '../components/howItWorks/ProcessSteps'
 import ImpactStrip from '../components/howItWorks/ImpactStrip'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function HowItWorks() {
+  const { t } = useLanguage()
+
   return (
     <div className="page-container py-12 sm:py-16">
       <PageHeader
-        kicker="Simple guided journey"
-        title="How UdyamSetu Works?"
-        subtitle="A simple 4-step journey from idea to successful enterprise."
+        kicker={t('how', 'kicker')}
+        title={t('how', 'title')}
+        subtitle={t('how', 'subtitle')}
       />
 
       <div className="mt-10">

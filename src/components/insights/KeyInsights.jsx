@@ -1,4 +1,5 @@
 import { CheckCircle2 } from 'lucide-react'
+import { useLanguage } from '../../context/LanguageContext'
 
 const bullets = [
   'Dairy business has good potential in your area.',
@@ -7,9 +8,11 @@ const bullets = [
 ]
 
 export default function KeyInsights() {
+  const { t } = useLanguage()
+
   return (
     <div className="soft-card p-5">
-      <div className="text-sm font-semibold text-neutral-900">Key Insights</div>
+      <div className="text-sm font-semibold text-neutral-900">{t('insights', 'key')}</div>
       <div className="mt-4 grid gap-3">
         {bullets.map((bullet) => (
           <div key={bullet} className="flex gap-2 text-xs leading-5 text-neutral-700">
@@ -18,7 +21,7 @@ export default function KeyInsights() {
           </div>
         ))}
       </div>
-      <div className="mt-4 text-[10px] text-neutral-500">These are prototype insights and should be replaced with sourced local data.</div>
+      <div className="mt-4 text-[10px] text-neutral-500">{t('insights', 'prototype')}</div>
     </div>
   )
 }

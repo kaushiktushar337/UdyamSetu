@@ -6,10 +6,14 @@ const questions = [
   'Kya mahilaon ke liye alag scheme hai?',
 ]
 
+import { useLanguage } from '../../context/LanguageContext'
+
 export default function SuggestedQuestions({ onSelect }) {
+  const { t } = useLanguage()
+
   return (
     <div>
-      <div className="text-xs font-semibold text-neutral-900">Popular Questions</div>
+      <div className="text-xs font-semibold text-neutral-900">{t('assistant', 'popular')}</div>
       <div className="mt-3 grid gap-2">
         {questions.map((question) => (
           <button

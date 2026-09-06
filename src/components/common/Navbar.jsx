@@ -1,21 +1,24 @@
 import { Link, NavLink } from 'react-router-dom'
-import { ArrowRight, ChevronDown } from 'lucide-react'
+import { ArrowRight, ChevronDown, Globe2 } from 'lucide-react'
 import { useState } from 'react'
+import { languages, useLanguage } from '../../context/LanguageContext'
 
 const navItems = [
-  { label: 'Home', to: '/' },
-  { label: 'How it works', to: '/how-it-works' },
-  { label: 'Schemes', to: '/schemes' },
-  { label: 'Business Insights', to: '/insights' },
-  { label: 'Calculator', to: '/calculator' },
-  { label: 'AI Assistant', to: '/assistant' },
+  { key: 'home', to: '/' },
+  { key: 'how', to: '/how-it-works' },
+  { key: 'schemes', to: '/schemes' },
+  { key: 'insights', to: '/insights' },
+  { key: 'calculator', to: '/calculator' },
+  { key: 'assistant', to: '/assistant' },
 ]
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [languageOpen, setLanguageOpen] = useState(false)
+  const { language, languageLabel, setLanguage, t } = useLanguage()
 
   return (
-    <header className="sticky top-0 z-50 border-b border-udyam-100/70 bg-white/90 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-udyam-100/70 bg-green-50 backdrop-blur">
       <div className="page-container flex h-[72px] items-center justify-between gap-4">
         <Link to="/" className="flex shrink-0 items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-udyam-50 text-lg">🌾</div>
@@ -36,17 +39,38 @@ export default function Navbar() {
                 }`
               }
             >
-              {item.label}
+              {t('nav', item.key)}
             </NavLink>
           ))}
         </nav>
 
         <div className="hidden items-center gap-2 lg:flex">
-          <button className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-700">
-            <span>🌐</span> English <ChevronDown size={13} />
-          </button>
-          <Link to="/calculator" className="green-button px-4 py-2.5 text-xs">
-            Get Started <ArrowRight size={14} />
+          <div className="relative">
+            <button
+              type="button"
+              aria-expanded={languageOpen}
+              onClick={() => setLanguageOpen((current) => !current)}
+              className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-700"
+            >
+              <Globe2 size={14} /> {languageLabel} <ChevronDown size={13} />
+            </button>
+            {languageOpen && (
+              <div className="absolute right-0 top-11 z-10 w-32 rounded-xl border border-neutral-100 bg-white p-1 shadow-soft">
+                {languages.map((option) => (
+                  <button
+                    type="button"
+                    key={option.code}
+                    onClick={() => { setLanguage(option.code); setLanguageOpen(false) }}
+                    className={`block w-full rounded-lg px-3 py-2 text-left text-xs ${language === option.code ? 'bg-udyam-50 font-semibold text-udyam-700' : 'text-neutral-700 hover:bg-neutral-50'}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Link to="/start" className="green-button px-4 py-2.5 text-xs">
+            {t('nav', 'getStarted')} <ArrowRight size={14} />
           </Link>
         </div>
 
@@ -68,9 +92,19 @@ export default function Navbar() {
                 to={item.to}
                 className="rounded-lg px-3 py-3 text-sm text-neutral-700 hover:bg-udyam-50"
               >
-                {item.label}
+                {t('nav', item.key)}
               </NavLink>
             ))}
+            <div className="mt-2 border-t border-neutral-100 pt-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{t('nav', 'language')}</div>
+              <div className="flex flex-wrap gap-2">
+                {languages.map((option) => (
+                  <button type="button" key={option.code} onClick={() => setLanguage(option.code)} className={`rounded-lg px-3 py-2 text-xs ${language === option.code ? 'bg-udyam-50 font-semibold text-udyam-700' : 'bg-neutral-50 text-neutral-700'}`}>
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}

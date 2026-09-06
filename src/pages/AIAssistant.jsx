@@ -5,6 +5,7 @@ import SuggestedQuestions from '../components/assistant/SuggestedQuestions'
 import ChatInput from '../components/assistant/ChatInput'
 import AssistantPanel from '../components/assistant/AssistantPanel'
 import { faq } from '../data/faq'
+import { useLanguage } from '../context/LanguageContext'
 
 const initialMessages = [
   { role: 'assistant', content: 'Namaste! 👋 Main aapka UdyamSetu Saathi hoon. Aap mujhe business idea, loan, schemes ya market ke baare mein pooch sakte hain.' },
@@ -14,6 +15,7 @@ const initialMessages = [
 
 export default function AIAssistant() {
   const [messages, setMessages] = useState(initialMessages)
+    const { t } = useLanguage()
 
   const answerFor = useMemo(() => {
     return (question) => {
@@ -33,8 +35,8 @@ export default function AIAssistant() {
   return (
     <div className="page-container py-12 sm:py-16">
       <PageHeader
-        title="AI Business Assistant"
-        subtitle="Ask anything about business, loans or schemes in your language."
+          title={t('assistant', 'title')}
+          subtitle={t('assistant', 'subtitle')}
       />
 
       <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_300px]">
