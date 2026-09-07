@@ -1,6 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
 import { ArrowRight, ChevronDown, Globe2 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { languages, useLanguage } from '../../context/LanguageContext'
 
 const navItems = [
@@ -15,10 +15,41 @@ const navItems = [
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [languageOpen, setLanguageOpen] = useState(false)
+  const [scrollProgress, setScrollProgress] = useState(0)
   const { language, languageLabel, setLanguage, t } = useLanguage()
+
+  useEffect(() => {
+    const updateScrollProgress = () => {
+      const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight
+      const progress = scrollableHeight > 0 ? (window.scrollY / scrollableHeight) * 100 : 0
+      setScrollProgress(Math.min(100, Math.max(0, progress)))
+    }
+
+    updateScrollProgress()
+    window.addEventListener('scroll', updateScrollProgress, { passive: true })
+    window.addEventListener('resize', updateScrollProgress)
+
+    return () => {
+      window.removeEventListener('scroll', updateScrollProgress)
+      window.removeEventListener('resize', updateScrollProgress)
+    }
+  }, [])
 
   return (
     <header className="sticky top-0 z-50 border-b border-udyam-100/70 bg-green-50 backdrop-blur">
+      <div
+        aria-label="Page scroll progress"
+        className="fixed inset-x-0 top-0 z-[60] h-1 bg-udyam-100/60"
+        role="progressbar"
+        aria-valuemax="100"
+        aria-valuemin="0"
+        aria-valuenow={Math.round(scrollProgress)}
+      >
+        <div
+          className="h-full bg-udyam-600 transition-[width] duration-150 ease-out"
+          style={{ width: `${scrollProgress}%` }}
+        />
+      </div>
       <div className="page-container flex h-[72px] items-center justify-between gap-4">
         <Link to="/" className="flex shrink-0 items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-udyam-50 text-lg">🌾</div>
