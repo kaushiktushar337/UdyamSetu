@@ -89,14 +89,26 @@ def calculate_business_analysis(data: BusinessAnalysisInput, weights=None):
         recommendations=recommendations,
     )
 
-def result_for_database(result):
-    """Maps engine output to the database team's agreed ML table scheme."""
-    return {
+def result_for_database(result, analysis_input=None):
+    """Map engine output to the agreed PostgreSQL write-table contract.
+
+    `analysis_input` is optional for backward compatibility. When supplied,
+    the mapper preserves the original market, operational and financial inputs
+    instead of writing placeholder NULL values.
+    """
+    financial_input = analysis_input.financial if analysis_input else None
+    market_input = analysis_input.market if analysis_input else None
+    operational_input = analysis_input.operational if analysis_input else None
+
+    payload = {
         "business_analyses": {
             "overall_score": result.overall_score,
             "decision": result.decision,
-            "confidence": result.confidence,
+            # Database column is NUMERIC(5,4); rule-based confidence is not a
+            # statistical probability, so use a documented prototype value.
+            "confidence": 0.65,
             "analysis_status": "completed",
+            "engine_version": "decision-engine-v1",
         },
         "analysis_scores": {
             "market_score": result.market.market_score,
@@ -106,22 +118,25 @@ def result_for_database(result):
             "overall_score": result.overall_score,
         },
         "market_analyses": {
-            "demand_score": result.market.demand_component / 0.35 if result.market.demand_component else 0,
-            "competition_score": None,
+            "demand_score": market_input.demand_score if market_input else result.market.demand_component / 0.35,
+            "competition_score": market_input.competition_score if market_input else None,
             "market_gap_score": None,
-            "pricing_score": None,
-            "opportunity_score": None,
-            "market_score": result.market.market_score,
+            "pricing_score": market_input.pricing_score if market_input else None,
+            "opportunity_score": market_input.opportunity_score if market_input else None,
         },
         "operational_analyses": {
+            "resource_score": operational_input.resource_score if operational_input else None,
+            "infrastructure_score": operational_input.infrastructure_score if operational_input else None,
+            "supply_chain_score": operational_input.supply_chain_score if operational_input else None,
+            "logistics_score": operational_input.logistics_score if operational_input else None,
             "operational_score": result.operational.operational_score,
         },
         "financial_analyses": {
-            "estimated_project_cost": None,
-            "available_capital": None,
+            "estimated_project_cost": financial_input.estimated_project_cost if financial_input else None,
+            "available_capital": (financial_input.available_capital + financial_input.funding_available) if financial_input else None,
             "funding_gap": result.financial.funding_gap,
-            "estimated_monthly_revenue": None,
-            "estimated_monthly_expenses": None,
+            "estimated_monthly_revenue": financial_input.estimated_monthly_revenue if financial_input else None,
+            "estimated_monthly_expenses": financial_input.estimated_monthly_expenses if financial_input else None,
             "estimated_monthly_profit": result.financial.monthly_profit,
             "break_even_months": result.financial.estimated_break_even_months,
         },
@@ -145,3 +160,4 @@ def result_for_database(result):
             for r in result.recommendations
         ],
     }
+    return payload
