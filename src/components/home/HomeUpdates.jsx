@@ -10,7 +10,7 @@ const updates = [
 
 export default function HomeUpdates() {
   return (
-    <section className="page-container py-8 sm:py-10">
+    <section className="page-container py-8 sm:py-10 font-sans">
       <div className="grid gap-7 lg:grid-cols-2">
         <article className="overflow-hidden rounded-[24px] border border-udyam-200 bg-white shadow-soft">
           <div className="bg-udyam-700 px-5 py-5 text-center sm:px-7">

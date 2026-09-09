@@ -91,3 +91,6 @@ button {
     @apply inline-flex items-center gap-2 rounded-full border border-udyam-200 bg-udyam-50 px-3 py-1.5 text-xs font-medium text-udyam-700;
   }
 }
+@theme {
+  --font-georgia: Georgia, serif;
+}
