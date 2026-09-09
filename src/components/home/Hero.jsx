@@ -1,11 +1,22 @@
 import { ArrowRight, PlayCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLanguage } from '../../context/LanguageContext'
+
+const heroImages = ['farmer.png', 'shop.png', 'tailor.png', 'electrician.png', 'gardener.png', 'milkman.png']
 
 export default function Hero() {
   const { t } = useLanguage()
   const [farmerHovered, setFarmerHovered] = useState(false)
+  const [activeImage, setActiveImage] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveImage((current) => (current + 1) % heroImages.length)
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <section className="pt-8 sm:pt-10">
@@ -31,42 +42,53 @@ export default function Hero() {
             </div>
 
             <div className="relative min-h-[280px] sm:min-h-[330px] overflow-visible">
+              <div
+                className="relative z-30 h-[330px] w-full overflow-visible"
+                onMouseEnter={() => setFarmerHovered(true)}
+                onMouseLeave={() => setFarmerHovered(false)}
+              >
+                <div className="absolute bottom-[-16px] right-[-8px] h-[420px] w-[420px] overflow-hidden">
+                  {heroImages.map((image, index) => (
+                    <img
+                      key={image}
+                      src={`/${image}`}
+                      alt={image.replace('.png', '')}
+                      className={`absolute bottom-0 right-0 h-[420px] w-auto object-contain drop-shadow-[0_25px_30px_rgba(0,0,0,0.22)] transition-all duration-700 ease-out ${
+                        index === activeImage ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95'
+                      }`}
+                      style={{
+                        marginRight: '-14px',
+                        transform: farmerHovered && index === activeImage ? 'translateY(-8px) scale(1.04)' : 'translateY(0) scale(1)',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
 
-  {/* Farmer */}
-  <div
-    className="relative z-30 h-[330px] w-full overflow-visible"
-    onMouseEnter={() => setFarmerHovered(true)}
-    onMouseLeave={() => setFarmerHovered(false)}
-  >
-    <img
-      src="/farmer.png"
-      alt="farmer"
-      className="
-        absolute
-        bottom-0
-        right-0
-        h-[340px]
-        w-auto
-        object-contain
-        drop-shadow-[0_20px_25px_rgba(0,0,0,0.22)]
-        transition-transform duration-300 ease-out
-      "
-      style={{ transform: farmerHovered ? 'translateY(-14px) scale(1.08)' : 'translateY(0) scale(1)' }}
-    />
-  </div>
+              <div className="absolute left-1/2 top-[calc(100%-10px)] z-40 flex -translate-x-1/2 items-center justify-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-2 shadow-sm backdrop-blur">
+                {heroImages.map((image, index) => (
+                  <button
+                    key={image}
+                    type="button"
+                    aria-label={`Show ${image.replace('.png', '')}`}
+                    onClick={() => setActiveImage(index)}
+                    className={`h-3 w-3 rounded-full border transition-all duration-300 ${
+                      index === activeImage ? 'h-3.5 w-3.5 border-udyam-700 bg-udyam-700' : 'border-udyam-700/60 bg-white hover:bg-udyam-100'
+                    }`}
+                  />
+                ))}
+              </div>
 
-  {/* Local Insight */}
-  <div className="absolute bottom-6 left-6 z-40 rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur">
-    <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
-      {t('home', 'local')}
-    </div>
+              <div className="absolute bottom-6 left-6 z-40 rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                  {t('home', 'local')}
+                </div>
 
-    <div className="mt-1 text-sm font-bold text-udyam-700">
-      {t('home', 'demand')}
-    </div>
-  </div>
-
-</div>
+                <div className="mt-1 text-sm font-bold text-udyam-700">
+                  {t('home', 'demand')}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

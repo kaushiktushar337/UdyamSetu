@@ -52,9 +52,11 @@ export default function Navbar() {
       </div>
       <div className="page-container flex h-[72px] items-center justify-between gap-4">
         <Link to="/" className="flex shrink-0 items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-udyam-50 text-lg">🌾</div>
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-udyam-50 text-lg">
+            <img className='object-cover' src="/UdyamSetuLogo.png" alt="UdyamSetuLogo" />
+          </div>
           <div className="leading-tight">
-            <div className="font-serif text-[25px] font-semibold tracking-tight text-neutral-900">UdyamSetu</div>
+            <div className="font-serif text-[25px] font-semibold tracking-tight text-udyam-800">UdyamSetu</div>
             <div className="text-[12px] font-medium text-neutral-600">Sapno ka saathi, safal udyam ki ore</div>
           </div>
         </Link>

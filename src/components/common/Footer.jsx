@@ -9,9 +9,11 @@ export default function Footer() {
       <div className="page-container grid gap-8 py-10 md:grid-cols-3">
         <div>
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-udyam-50">🌾</div>
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-udyam-50">
+              <img className='object-cover' src="/UdyamSetuLogo.png" alt="UdyamSetuLogo" />
+            </div>
             <div>
-              <div className="font-serif text-lg font-semibold">UdyamSetu</div>
+              <div className="font-serif text-lg font-semibold text-udyam-800">UdyamSetu</div>
               <div className="text-xs text-neutral-500">{t('footer', 'tagline')}</div>
             </div>
           </div>
