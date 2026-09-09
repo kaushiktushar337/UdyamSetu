@@ -1,0 +1,71 @@
+{
+  "rows_used": 269065,
+  "train_rows": 215252,
+  "test_rows": 53813,
+  "target": "profitability_tier",
+  "accuracy": 0.7031014810547637,
+  "balanced_accuracy": 0.7031026138757531,
+  "macro_f1": 0.7046546112009607,
+  "weighted_f1": 0.7046532738913107,
+  "classification_report": {
+    "high": {
+      "precision": 0.7412909541083664,
+      "recall": 0.717694280298807,
+      "f1-score": 0.7293017986120947,
+      "support": 17938.0
+    },
+    "low": {
+      "precision": 0.7895949760903382,
+      "recall": 0.7640631097730948,
+      "f1-score": 0.776619255397518,
+      "support": 17937.0
+    },
+    "medium": {
+      "precision": 0.5897113520875897,
+      "recall": 0.6275504515553574,
+      "f1-score": 0.6080427795932698,
+      "support": 17938.0
+    },
+    "accuracy": 0.7031014810547637,
+    "macro avg": {
+      "precision": 0.7068657607620982,
+      "recall": 0.7031026138757531,
+      "f1-score": 0.7046546112009607,
+      "support": 53813.0
+    },
+    "weighted avg": {
+      "precision": 0.7068642234158189,
+      "recall": 0.7031014810547637,
+      "f1-score": 0.7046532738913107,
+      "support": 53813.0
+    }
+  },
+  "feature_columns": [
+    "sector",
+    "district",
+    "location",
+    "major_nic_2dig",
+    "major_nic_5dig",
+    "ownership_type",
+    "education_level",
+    "technical_training",
+    "num_eco_activities",
+    "bank_account",
+    "est_type",
+    "years_of_operation",
+    "months_operated",
+    "daily_work_hours",
+    "accounts_maintained",
+    "used_computer",
+    "used_internet",
+    "registered",
+    "manuf_services",
+    "contract_manuf_service",
+    "franchise",
+    "total_workers",
+    "fixed_assets_owned",
+    "fixed_assets_hired",
+    "net_additions_assets"
+  ],
+  "source": "ASUSE 2023-24"
+}

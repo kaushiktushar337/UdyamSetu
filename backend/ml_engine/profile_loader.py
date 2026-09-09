@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from dotenv import load_dotenv
 
@@ -28,9 +28,9 @@ class BusinessProfile:
     expected_monthly_expenses: Optional[float] = None
     expected_profit_margin: Optional[float] = None
     typical_break_even_months: Optional[float] = None
-    resource_requirements: Optional[str] = None
-    infrastructure_requirements: Optional[str] = None
-    risk_factors: Optional[str] = None
+    resource_requirements: Optional[Any] = None
+    infrastructure_requirements: Optional[Any] = None
+    risk_factors: Optional[Any] = None
     data_source: Optional[str] = None
 
     def searchable_text(self) -> str:
@@ -45,6 +45,25 @@ class BusinessProfile:
         ]
         return "\n".join(str(p) for p in parts if p)
 
+    @staticmethod
+    def load_profiles_from_csv(path: str) -> List[BusinessProfile]:
+        """Load the database-ready reference CSV for offline demos/tests."""
+        import csv
+        numeric = {
+            "minimum_capital", "typical_project_cost", "expected_monthly_revenue",
+            "expected_monthly_expenses", "expected_profit_margin", "typical_break_even_months",
+        }
+        profiles = []
+        with open(path, encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                for key in numeric:
+                    if row.get(key) not in (None, ""):
+                        row[key] = float(row[key])
+                    else:
+                        row[key] = None
+                profiles.append(BusinessProfile(**{k: row.get(k) for k in BusinessProfile.__dataclass_fields__}))
+        return profiles
+
 
 class BusinessProfileLoader:
     """Loads business reference profiles from the project's PostgreSQL database."""
@@ -53,6 +72,11 @@ class BusinessProfileLoader:
         self.database_url = database_url or os.getenv("DATABASE_URL")
         if not self.database_url:
             raise ValueError("DATABASE_URL is missing from the environment")
+
+    @staticmethod
+    def load_profiles_from_csv(path: str) -> List[BusinessProfile]:
+        """Load the database-ready reference CSV for offline demos/tests."""
+        return BusinessProfile.load_profiles_from_csv(path)
 
     def load_profiles(self, limit: Optional[int] = None) -> List[BusinessProfile]:
         query = """
