@@ -1,9 +1,11 @@
 import { ArrowRight, PlayCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { useLanguage } from '../../context/LanguageContext'
 
 export default function Hero() {
   const { t } = useLanguage()
+  const [farmerHovered, setFarmerHovered] = useState(false)
 
   return (
     <section className="pt-8 sm:pt-10">
@@ -31,7 +33,11 @@ export default function Hero() {
             <div className="relative min-h-[280px] sm:min-h-[330px] overflow-visible">
 
   {/* Farmer */}
-  <div className="relative h-[330px] w-full overflow-visible">
+  <div
+    className="relative z-30 h-[330px] w-full overflow-visible"
+    onMouseEnter={() => setFarmerHovered(true)}
+    onMouseLeave={() => setFarmerHovered(false)}
+  >
     <img
       src="/farmer.png"
       alt="farmer"
@@ -43,12 +49,14 @@ export default function Hero() {
         w-auto
         object-contain
         drop-shadow-[0_20px_25px_rgba(0,0,0,0.22)]
+        transition-transform duration-300 ease-out
       "
+      style={{ transform: farmerHovered ? 'translateY(-14px) scale(1.08)' : 'translateY(0) scale(1)' }}
     />
   </div>
 
   {/* Local Insight */}
-  <div className="absolute bottom-6 left-6 z-10 rounded-2xl border border-white/80 bg-white/70 px-4 py-3 shadow-sm backdrop-blur">
+  <div className="absolute bottom-6 left-6 z-40 rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur">
     <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
       {t('home', 'local')}
     </div>
