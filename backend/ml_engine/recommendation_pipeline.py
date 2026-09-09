@@ -9,6 +9,7 @@ from .recommendation_engine import RecommendationEngine, UserBusinessContext
 from .decision_engine import BusinessAnalysisInput, calculate_business_analysis
 from .feature_extractor import FeatureExtractor
 from .calibration_model import ScoreCalibrator
+from .asuse_model import ASUSEProfitabilityModel
 
 
 class BusinessRecommendationPipeline:
@@ -18,12 +19,14 @@ class BusinessRecommendationPipeline:
         calibrator: Optional[ScoreCalibrator] = None,
         location_loader=None,
         matcher=None,
+        asuse_model: Optional[ASUSEProfitabilityModel] = None,
     ):
         self.matcher = matcher or BusinessMatcher().fit(profiles)
         self.recommendation_engine = RecommendationEngine()
         self.feature_extractor = FeatureExtractor()
         self.calibrator = calibrator or ScoreCalibrator()
         self.location_loader = location_loader
+        self.asuse_model = asuse_model
 
     def _resolve_location_metrics(self, context, profile, supplied):
         if supplied is not None:
@@ -56,7 +59,10 @@ class BusinessRecommendationPipeline:
                 operational=generated.operational,
                 business_risks=generated.business_risks,
             )
-            analysis = calculate_business_analysis(analysis_input)
+            asuse_prediction = None
+            if self.asuse_model is not None:
+                asuse_prediction = self.asuse_model.predict(context, match.profile, generated)
+            analysis = calculate_business_analysis(analysis_input, asuse_prediction=asuse_prediction)
             features = self.feature_extractor.extract(context, match, generated, analysis)
             calibration = self.calibrator.predict(features, analysis.overall_score)
             results.append({
@@ -68,7 +74,9 @@ class BusinessRecommendationPipeline:
                 "analysis": analysis,
                 "features": features,
                 "calibration": calibration,
-                "final_recommendation_score": calibration.score,
+                "asuse_prediction": asuse_prediction,
+                "final_recommendation_score": analysis.overall_score,
+                "explanation": analysis.explanation,
             })
         results.sort(key=lambda item: (item["final_recommendation_score"], item["match"].final_score), reverse=True)
         return results

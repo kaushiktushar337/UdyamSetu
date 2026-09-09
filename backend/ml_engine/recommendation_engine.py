@@ -25,6 +25,14 @@ class UserBusinessContext:
     location: Optional[str] = None
     location_id: Optional[str] = None
     preferences: str = ""
+    # Optional ASUSE-compatible survey codes/values supplied by the application.
+    # These let the integration use exact survey coding when the frontend/database
+    # has it, while the adapter can still derive conservative defaults.
+    asuse_overrides: Dict[str, Any] = field(default_factory=dict)
+    # Optional planning inputs that map more directly to ASUSE establishment features.
+    planned_workers: Optional[float] = None
+    business_age_years: Optional[float] = None
+    daily_work_hours: Optional[float] = None
 
 
 @dataclass

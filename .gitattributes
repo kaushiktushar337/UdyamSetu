@@ -1,5 +1,0 @@
-backend/models/asuse_profitability.joblib.psd filter=lfs diff=lfs merge=lfs -text
-backend/models/asuse_profitability.joblib filter=lfs diff=lfs merge=lfs -text
-backend/ASUSE_DATA_2023_24_CSV.zip filter=lfs diff=lfs merge=lfs -text
-*.psd filter=lfs diff=lfs merge=lfs -text
-*backend/models/asuse_profitability.joblib filter=lfs diff=lfs merge=lfs -text

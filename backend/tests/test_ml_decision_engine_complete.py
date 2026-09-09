@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
 class TestSchemaAndServiceIntegration(unittest.TestCase):
     def test_reference_schema_contains_exact_persistence_contract(self):
-        sql = (ROOT / "database_schema_reference.sql").read_text(encoding="utf-8")
+        sql = (ROOT / "database" / "ml_schema.sql").read_text(encoding="utf-8")
         expected = {
             "business_analyses": ["user_id", "business_id", "location_id", "overall_score", "decision", "confidence", "analysis_status", "engine_version"],
             "analysis_scores": ["analysis_id", "market_score", "operational_score", "financial_score", "risk_score", "overall_score"],

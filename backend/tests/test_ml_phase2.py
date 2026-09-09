@@ -43,7 +43,7 @@ class TestDatabaseContract(unittest.TestCase):
         self.assertEqual(header, REFERENCE_PROFILE_COLUMNS)
 
     def test_sql_reference_contains_expected_schema_columns(self):
-        sql = (ROOT / "database_schema_reference.sql").read_text(encoding="utf-8")
+        sql = (ROOT / "database" / "ml_schema.sql").read_text(encoding="utf-8")
         for column in REFERENCE_PROFILE_COLUMNS - {"profile_id"}:
             self.assertIn(column, sql)
         for column in LOCATION_METRIC_COLUMNS - {"metric_id"}:

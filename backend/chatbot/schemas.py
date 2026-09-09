@@ -21,6 +21,8 @@ class ChatRequest:
     message: str
     conversation_id: Optional[str] = None
     user_id: Optional[str] = None
+    location_text: Optional[str] = None
+    funding_context: Optional[str] = None
 
 @dataclass
 class ChatResponse:

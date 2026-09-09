@@ -1,41 +1,35 @@
-# UdyamSetu Decision Engine — Complete Prototype
+# UdyamSetu Backend
 
-## Implemented modules
-- Financial Feasibility Engine
-- Market Feasibility Engine
-- Operational Feasibility Engine
-- Risk Engine
-- Final Decision Engine
-- Database mapping layer
+FastAPI backend for the UdyamSetu AI assistant, business insights, ASUSE ML model, Decision Engine, live location services, and funding recommendations.
 
-## Database scheme alignment
+## Run
 
-### Reference/read data
-- `business_reference_profiles`
-- `location_business_metrics`
-
-### Analysis/write data
-- `business_analyses`
-- `analysis_scores`
-- `market_analyses`
-- `operational_analyses`
-- `financial_analyses`
-- `analysis_risks`
-- `analysis_recommendations`
-
-The engine currently works independently with structured inputs. Database/API integration can be added without changing the core scoring modules.
-
-## Run the complete prototype
-
-```bash
-python complete_demo.py
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## Current decision labels
-- 80–100: Highly Viable
-- 65–79: Viable
-- 45–64: Needs Modification
-- Below 45: Reconsider
+Create `.env` from `.env.example` and provide the PostgreSQL/Supabase `DATABASE_URL` and `OPENROUTER_API_KEY`.
 
-## Important
-This is an explainable rule-based v1 engine. Scoring weights and thresholds are centralized in modules so they can later be calibrated from real business and market data.
+## Test
+
+```powershell
+python -m pytest -q
+```
+
+## Train ASUSE model
+
+```powershell
+python -m ml_engine.training.train_asuse_model --data data/asuse_2023_24_training.csv --model models/asuse_profitability.joblib
+```
+
+## Database reference
+
+`database/ml_schema.sql` contains the ML/Decision Engine schema reference. The live application also expects the database team's chatbot, location, and funding tables.
+
+## Documentation
+
+- `docs/api.md` — API reference
+- `docs/chatbot.md` — chatbot architecture and behavior
+- `database/seed_reference_data.py` — reference-data seeding
