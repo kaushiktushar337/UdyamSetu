@@ -1,34 +1,241 @@
-# UdyamSetu Frontend
+# UdyamSetu
 
-Componentized React frontend for the UdyamSetu prototype.
+UdyamSetu is an AI-powered business guidance platform built for entrepreneurs and small businesses in India. It brings business discovery, local market insights, financial planning, funding options, and an AI assistant together in one place.
 
-## Stack
+The project has two main parts:
 
-- React.js
-- JavaScript (ES6+)
-- Tailwind CSS
-- Recharts-ready architecture
-- Lucide React
-- React Router
+- **Frontend** — a React + Vite application for the user experience.
+- **Backend** — a FastAPI service that connects the chatbot, ASUSE-based ML model, business decision engine, location services, and funding data in PostgreSQL.
 
-## Run
+## What the platform does
 
-```bash
+### AI Assistant
+The chatbot uses retrieval-augmented generation (RAG), conversation memory, and an external LLM to answer business questions in a practical, user-friendly way. Funding-related questions can also use the database-backed scheme and loan information.
+
+### Business Insights
+Business Insights combines the selected area, business category, location market metrics, and semantic business matching to show local opportunities, demand, competition, and related signals.
+
+### Business Decision Engine
+The ML/Decision Engine evaluates a proposed business using financial, market, operational, and risk factors. The ASUSE profitability model adds a historical data signal where the required inputs are available.
+
+### Funding
+The Schemes and Loan Plans experience reads from the database team's `scheme_rules` and `loan_plans` tables. Recommendations are ranked using the user's project cost, loan requirement, business category, location, and stored eligibility information.
+
+### Live location
+Users can choose **Use my current location**. The browser location is resolved on the backend to a supported reference location and used for local insights and analysis. The interface displays the estimated area rather than raw coordinates.
+
+---
+
+## Project structure
+
+```text
+udyamsetu/
+├── frontend/
+│   ├── src/
+│   ├── public/
+│   ├── package.json
+│   ├── vite.config.js
+│   └── .env.example
+│
+├── backend/
+│   ├── api/
+│   ├── chatbot/
+│   ├── ml_engine/
+│   ├── database/
+│   ├── data/
+│   ├── models/
+│   ├── tests/
+│   ├── training/
+│   ├── requirements.txt
+│   └── .env.example
+│
+├── .gitignore
+└── README.md
+```
+
+## Run locally
+
+### 1. Backend
+
+From the `backend` directory:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Create `backend/.env` from `backend/.env.example` and add your PostgreSQL/Supabase connection and OpenRouter key.
+
+Start the API:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Using the Python executable directly avoids PowerShell execution-policy problems with `Activate.ps1`.
+
+### 2. Frontend
+
+From the `frontend` directory:
+
+```powershell
 npm install
 npm run dev
 ```
 
-## Pages
+Create `frontend/.env` from `frontend/.env.example` if you need to change the backend URL.
 
-- `/` — Home
-- `/how-it-works` — How UdyamSetu works
-- `/schemes` — Government schemes
-- `/insights` — Business insights
-- `/calculator` — Financial calculator + scheme router
-- `/assistant` — AI Business Assistant
+The Vite development server normally runs at:
 
-## Structure
+```text
+http://localhost:5173
+```
 
-`src/components` contains reusable UI sections, `src/pages` contains route-level pages, `src/data` contains prototype data, and `src/utils` contains deterministic financial/scheme logic.
+## Environment variables
 
-This is frontend-only. Replace the prototype data/actions with the FastAPI endpoints from the project specification when the backend is connected.
+### Backend
+
+```env
+DATABASE_URL=postgresql://USERNAME:PASSWORD@HOST:PORT/postgres
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openrouter/free
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions
+LOCATION_REVERSE_GEOCODE=false
+```
+
+Keep `.env` files out of GitHub.
+
+### Frontend
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_API_TIMEOUT_MS=20000
+```
+
+## Main API routes
+
+| Route | Purpose |
+|---|---|
+| `GET /health` | Backend health |
+| `POST /api/chat` | Chat with memory and business context |
+| `GET /api/chat/history/{conversation_id}` | Load a conversation |
+| `POST /api/location` | Resolve and save the user's current location |
+| `GET /api/location/latest/{user_id}` | Get the latest saved location |
+| `GET /api/locations` | List supported reference locations |
+| `POST /api/insights` | Get location-aware business insights |
+| `POST /api/analyze` | Run the ML/Decision Engine |
+| `POST /api/funding/recommendations` | Rank schemes and loan plans |
+| `GET /api/funding/schemes` | List active schemes |
+| `GET /api/funding/loans` | List active loan plans |
+
+## Database
+
+The backend expects the application database plus the UdyamSetu tables supplied to the database team.
+
+The ML schema reference is in:
+
+```text
+backend/database/ml_schema.sql
+```
+
+The funding tables are:
+
+```text
+scheme_rules
+loan_plans
+```
+
+The location flow uses:
+
+```text
+location_reference
+location_business_metrics
+user_locations
+```
+
+Reference data can be loaded with:
+
+```powershell
+python database/seed_reference_data.py --dry-run
+```
+
+and, once the database schema and location ID types are aligned:
+
+```powershell
+python database/seed_reference_data.py --replace-demo-metrics
+```
+
+The development market metrics generated by that script are clearly labelled as seed data and should be replaced with validated market data before being presented as real-world market statistics.
+
+## Training the ASUSE model
+
+The ASUSE model can be trained manually:
+
+```powershell
+python -m ml_engine.training.train_asuse_model --data data/asuse_2023_24_training.csv --model models/asuse_profitability.joblib
+```
+
+Training artifacts and metrics are written to `backend/models/`.
+
+The training pipeline is intentionally separate from the live API so the model can be retrained and tested without changing application code.
+
+## Testing
+
+Run the backend test suite from `backend`:
+
+```powershell
+python -m pytest -q
+```
+
+The tests cover the ML/Decision Engine, ASUSE integration, funding service, API contracts, location-aware behavior, and chatbot pipeline.
+
+For a frontend production build:
+
+```powershell
+cd frontend
+npm install
+npm run build
+```
+
+## GitHub and deployment
+
+Before pushing:
+
+```powershell
+git init
+git add .
+git commit -m "Initial UdyamSetu release"
+git branch -M main
+git remote add origin <YOUR_GITHUB_REPOSITORY>
+git push -u origin main
+```
+
+Do not commit:
+
+- `.env` files
+- API keys or database passwords
+- `node_modules`
+- Python virtual environments
+- build output
+- Python cache files
+
+The repository includes the trained ASUSE model and the prepared training CSV. The CSV is over GitHub's 50 MB warning threshold, although it is still below GitHub's 100 MB hard file limit. Git LFS is a good option if you want to keep large training artifacts in the repository long term.
+
+## Current project status
+
+The core UdyamSetu flow is integrated:
+
+```text
+Frontend
+   ↓
+FastAPI
+   ├── AI Chatbot + memory
+   ├── Live location
+   ├── Business Insights
+   ├── ASUSE + Decision Engine
+   └── Schemes + Loan Plans
+            ↓
+       PostgreSQL
+```
+
+The project is designed so the application can use the database team's tables without replacing their existing application data.
