@@ -5,6 +5,15 @@ import { useLanguage } from '../../context/LanguageContext'
 
 const heroImages = ['farmer.png', 'shop.png', 'tailor.png', 'electrician.png', 'gardener.png', 'milkman.png']
 
+const heroImageMeta = {
+  'farmer.png': { label: 'Farm Growth', demand: 'Organic produce demand' },
+  'shop.png': { label: 'Retail Growth', demand: 'Daily essentials demand' },
+  'tailor.png': { label: 'Service Growth', demand: 'Custom clothing demand' },
+  'electrician.png': { label: 'Skill Growth', demand: 'Repair services demand' },
+  'gardener.png': { label: 'Green Growth', demand: 'Urban gardening demand' },
+  'milkman.png': { label: 'Dairy Growth', demand: 'Fresh milk demand' },
+}
+
 export default function Hero() {
   const { t } = useLanguage()
   const [farmerHovered, setFarmerHovered] = useState(false)
@@ -81,11 +90,11 @@ export default function Hero() {
 
               <div className="absolute bottom-6 left-6 z-40 rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur">
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
-                  {t('home', 'local')}
+                  {heroImageMeta[heroImages[activeImage]].label}
                 </div>
 
                 <div className="mt-1 text-sm font-bold text-udyam-700">
-                  {t('home', 'demand')}
+                  {heroImageMeta[heroImages[activeImage]].demand}
                 </div>
               </div>
             </div>
