@@ -1,20 +1,16 @@
-# Vercel production bundle exclusions
-.git
-.github
-__pycache__
-*.py[cod]
-.pytest_cache
-.venv
-venv
-node_modules
-
-# ASUSE training-only data and artifacts
-data/asuse_2023_24_training.csv
+# Keep the runtime bundle small. Production uses DATABASE_URL for reference data.
+data/
 ml_engine/training/
 tests/
-
-# Documentation and local-only files
 docs/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 .env
 .env.*
 !.env.example
+.git/
+.gitignore
+README.md
