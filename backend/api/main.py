@@ -103,28 +103,43 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
     app = FastAPI(title="UdyamSetu API", version="2.0.0")
     origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "*").split(",") if x.strip()]
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=origins != ["*"], allow_methods=["*"], allow_headers=["*"])
-    app.state.decision_service = service
-    app.state.chat_service = None
+# ---------------------------------------------------------
+# EAGER SERVICE INITIALIZATION
+# ---------------------------------------------------------
+# Initialize the decision engine and chatbot during startup
+# instead of waiting for the first API request.
+# ---------------------------------------------------------
+
+    try:
+        app.state.decision_service = service or build_service()
+
+        app.state.chat_service = ChatService(
+            memory=ConversationManager(
+                database_url=os.getenv("DATABASE_URL")
+            )
+        )
+
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to initialize UdyamSetu services: {exc}"
+        ) from exc
+
+
+# ---------------------------------------------------------
+# SERVICE GETTERS
+# ---------------------------------------------------------
+# These no longer perform lazy initialization.
+# They simply return the services that were initialized
+# during application startup.
+# ---------------------------------------------------------
 
     def get_service():
-        if app.state.decision_service is None:
-            try:
-                app.state.decision_service = build_service()
-            except Exception as exc:
-                raise HTTPException(status_code=503, detail=f"Decision engine unavailable: {exc}") from exc
         return app.state.decision_service
 
+
     def get_chat_service():
-        if app.state.chat_service is None:
-            app.state.chat_service = ChatService(memory=ConversationManager(database_url=os.getenv("DATABASE_URL")), funding_provider=FundingService())
         return app.state.chat_service
-
-    @app.get("/health")
-    def health():
-        svc = app.state.decision_service
-        return {"status": "ok", "service": "udyamsetu", "loaded": svc is not None, "asuse_model_loaded": bool(svc is not None and getattr(svc.pipeline.asuse_model, "is_loaded", False))}
-
-    @app.post("/api/chat")
+        @app.post("/api/chat")
     def chat(request: ChatApiRequest):
         try:
             result = get_chat_service().chat(BotChatRequest(message=request.message, conversation_id=request.conversation_id, user_id=request.user_id, location_text=request.location_text))
