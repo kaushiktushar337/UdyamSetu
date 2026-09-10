@@ -78,9 +78,8 @@ class FundingService:
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, scheme_name, scheme_code,
-                    official_portal_url, description, min_project_cost,
-                              max_project_cost, margin_ratio, funding_ratio, max_loan_amount,
+                    """SELECT id, scheme_name, scheme_code, description, official_portal_url,
+                              min_project_cost, max_project_cost, margin_ratio, funding_ratio, max_loan_amount,
                               interest_rate, tenure_months, moratorium_months,
                               moratorium_interest_treatment, version, effective_from,
                               effective_until, is_active
@@ -97,7 +96,7 @@ class FundingService:
         category_l = (category or "").lower().strip()
         result = []
         for r in rows:
-            min_cost, max_cost = float(r[4]), float(r[5])
+            min_cost, max_cost = float(r[5]), float(r[6])
             score = 50.0
             reasons: list[str] = ["Active and within its stored effective date range."]
             if project_cost is not None:
@@ -118,14 +117,15 @@ class FundingService:
                 reasons.append("The stored scheme name/description mentions your business category.")
             result.append({
                 "id": r[0], "scheme_name": r[1], "scheme_code": r[2], "description": r[3],
+                "official_portal_url": r[4],
                 "min_project_cost": min_cost, "max_project_cost": max_cost,
-                "margin_ratio": float(r[6]), "funding_ratio": float(r[7]),
-                "max_loan_amount": float(r[8]), "interest_rate": float(r[9]),
-                "tenure_months": r[10], "moratorium_months": r[11],
-                "moratorium_interest_treatment": r[12], "version": r[13],
-                "effective_from": r[14].isoformat() if r[14] else None,
-                "effective_until": r[15].isoformat() if r[15] else None,
-                "is_active": bool(r[16]), "match_score": round(min(score, 100), 1),
+                "margin_ratio": float(r[7]), "funding_ratio": float(r[8]),
+                "max_loan_amount": float(r[9]), "interest_rate": float(r[10]),
+                "tenure_months": r[11], "moratorium_months": r[12],
+                "moratorium_interest_treatment": r[13], "version": r[14],
+                "effective_from": r[15].isoformat() if r[15] else None,
+                "effective_until": r[16].isoformat() if r[16] else None,
+                "is_active": bool(r[17]), "match_score": round(min(score, 100), 1),
                 "match_reasons": reasons,
                 "source_type": "database.scheme_rules",
             })
