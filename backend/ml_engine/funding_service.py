@@ -78,7 +78,8 @@ class FundingService:
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, scheme_name, scheme_code, description, min_project_cost,
+                    """SELECT id, scheme_name, scheme_code,
+                    official_portal_url, description, min_project_cost,
                               max_project_cost, margin_ratio, funding_ratio, max_loan_amount,
                               interest_rate, tenure_months, moratorium_months,
                               moratorium_interest_treatment, version, effective_from,
