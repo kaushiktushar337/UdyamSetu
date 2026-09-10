@@ -14,6 +14,7 @@ from typing import Iterable, List, Optional
 import numpy as np
 
 from .profile_loader import BusinessProfile
+from chatbot.embedding_model import get_embedding_model
 
 
 @dataclass
@@ -37,11 +38,10 @@ class BusinessMatcher:
         )
         self.semantic_weight = semantic_weight
         self.capital_weight = capital_weight
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError as exc:
-            raise RuntimeError("sentence-transformers is required for semantic matching. Install requirements.txt before running the full pipeline.") from exc
-        self.model = SentenceTransformer(self.model_name)
+        # Reuse the chatbot's process-wide embedding model instead of loading
+        # a second copy of the same transformer. This is critical on small
+        # Render instances with a 512 MiB memory limit.
+        self.model = get_embedding_model()
 
         self._profiles: List[BusinessProfile] = []
         self._profile_embeddings: Optional[np.ndarray] = None

@@ -21,10 +21,16 @@ async function request(path, options = {}) {
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
+    const headers = {
+      Accept: 'application/json',
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    }
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       signal: options.signal || controller.signal,
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(options.headers || {}) },
+      headers,
     })
 
     const contentType = response.headers.get('content-type') || ''

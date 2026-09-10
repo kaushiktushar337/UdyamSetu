@@ -13,9 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from chatbot.chat_service import ChatService
+from chatbot.embedding_model import embedding_model_loaded
 from chatbot.conversation_manager import ConversationManager
 from chatbot.schemas import ChatRequest as BotChatRequest
-from chatbot.similarity_search import preload_model
 from ml_engine.decision_service import UdyamSetuDecisionService
 from ml_engine.recommendation_engine import UserBusinessContext
 from ml_engine.profile_loader import BusinessProfileLoader
@@ -45,12 +45,24 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def build_service() -> UdyamSetuDecisionService:
+def build_service(*, preload_asuse: bool | None = None) -> UdyamSetuDecisionService:
     database_url = os.getenv("DATABASE_URL")
     model_path = os.getenv("ASUSE_MODEL_PATH", str(DEFAULT_MODEL_PATH))
+
+    # The ASUSE joblib pipeline is intentionally not loaded during normal
+    # startup on the 512 MiB Render instance. The semantic embedding model is
+    # shared by the decision engine and chatbot; loading both that transformer
+    # and the ASUSE sklearn pipeline at once can exceed the memory limit.
+    if preload_asuse is None:
+        preload_asuse = os.getenv("ASUSE_MODEL_PRELOAD", "false").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+
     asuse_model = None
     if model_path and Path(model_path).exists():
-        asuse_model = ASUSEProfitabilityModel(model_path).load()
+        asuse_model = ASUSEProfitabilityModel(model_path)
+        if preload_asuse:
+            asuse_model.load()
 
     if database_url:
         profiles = BusinessProfileLoader(database_url).load_profiles()
@@ -101,26 +113,20 @@ class InsightRequest(BaseModel):
     district: str | None = None
     category: str = "Dairy"
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Initialize expensive services once when FastAPI starts.
+    """Initialize heavyweight services after Uvicorn has bound the port.
 
-    This keeps initialization out of module import time while
-    still preventing the first user request from paying the
-    model-loading cost.
+    The semantic embedding model is loaded once through BusinessMatcher and
+    shared with chatbot RAG. The ASUSE model stays unloaded until an analysis
+    actually needs it unless ASUSE_MODEL_PRELOAD=true is explicitly configured.
     """
-
     try:
-        print("UdyamSetu startup: loading decision engine...")
+        print("UdyamSetu startup: initializing decision/chat services...")
 
-        app.state.decision_service = build_service()
-
-        print("UdyamSetu startup: loading chatbot embedding model...")
-
-        preload_model()
-
-        print("UdyamSetu startup: creating chatbot service...")
+        initial_service = getattr(app.state, "initial_decision_service", None)
+        app.state.decision_service = initial_service or build_service()
 
         app.state.chat_service = ChatService(
             memory=ConversationManager(
@@ -128,44 +134,68 @@ async def lifespan(app: FastAPI):
             )
         )
 
-        print("UdyamSetu startup: services loaded successfully.")
-
+        print("UdyamSetu startup: services initialized successfully.")
+        print(
+            "UdyamSetu startup: ASUSE model loaded = "
+            f"{bool(getattr(app.state.decision_service.pipeline.asuse_model, 'is_loaded', False))}"
+        )
     except Exception as exc:
         print(f"UdyamSetu startup failed: {exc}")
         raise
 
     yield
 
-    print("UdyamSetu shutdown.")
 
 def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
-
     app = FastAPI(
         title="UdyamSetu API",
         version="2.0.0",
         lifespan=lifespan,
     )
-    origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "*").split(",") if x.strip()]
-    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=origins != ["*"], allow_methods=["*"], allow_headers=["*"])
 
-# ---------------------------------------------------------
-# SERVICE GETTERS
-# ---------------------------------------------------------
-# These no longer perform lazy initialization.
-# They simply return the services that were initialized
-# during application startup.
-# ---------------------------------------------------------
+    app.state.initial_decision_service = service
+
+    # Keep create_app(service) compatible with the existing unit tests and
+    # embedding-free test doubles. Production (service=None) initializes these
+    # during the FastAPI lifespan after Uvicorn has bound the port.
+    if service is not None:
+        app.state.decision_service = service
+        app.state.chat_service = ChatService(
+            memory=ConversationManager(
+                database_url=os.getenv("DATABASE_URL")
+            )
+        )
+
+    origins = [
+        x.strip()
+        for x in os.getenv("CORS_ORIGINS", "*").split(",")
+        if x.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=origins != ["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     def get_service():
         return app.state.decision_service
 
-
     def get_chat_service():
         return app.state.chat_service
+
     @app.post("/api/chat")
     def chat(request: ChatApiRequest):
         try:
-            result = get_chat_service().chat(BotChatRequest(message=request.message, conversation_id=request.conversation_id, user_id=request.user_id, location_text=request.location_text))
+            result = get_chat_service().chat(
+                BotChatRequest(
+                    message=request.message,
+                    conversation_id=request.conversation_id,
+                    user_id=request.user_id,
+                    location_text=request.location_text,
+                )
+            )
             return _jsonable(result)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -180,12 +210,27 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"History unavailable: {exc}") from exc
 
+    @app.get("/health")
+    def health():
+        svc = app.state.decision_service
+        asuse_model = getattr(svc.pipeline, "asuse_model", None) if svc is not None else None
+        return {
+            "status": "ok",
+            "service": "udyamsetu",
+            "loaded": svc is not None,
+            "embedding_model_loaded": embedding_model_loaded(),
+            "asuse_model_loaded": bool(
+                asuse_model is not None and getattr(asuse_model, "is_loaded", False)
+            ),
+        }
+
     @app.post("/api/location")
     def save_location(request: LocationRequest):
         location_service = LocationService()
         resolution = location_service.resolve(request.latitude, request.longitude)
-        persisted = location_service.save_capture(request.user_id, request.latitude, request.longitude, request.accuracy, resolution)
-        # Deliberately never return raw GPS coordinates.
+        persisted = location_service.save_capture(
+            request.user_id, request.latitude, request.longitude, request.accuracy, resolution
+        )
         return {**resolution, "persisted": persisted}
 
     @app.get("/api/location/latest/{user_id}")
@@ -206,9 +251,15 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
     def funding_recommendations(request: FundingRequest):
         try:
             return FundingService().recommend(
-                category=request.category, project_cost=request.project_cost, loan_amount=request.loan_amount,
-                state=request.state, district=request.district, age=request.age, credit_score=request.credit_score,
-                business_vintage_months=request.business_vintage_months, limit=request.limit,
+                category=request.category,
+                project_cost=request.project_cost,
+                loan_amount=request.loan_amount,
+                state=request.state,
+                district=request.district,
+                age=request.age,
+                credit_score=request.credit_score,
+                business_vintage_months=request.business_vintage_months,
+                limit=request.limit,
             )
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"Funding recommendations unavailable: {exc}") from exc
@@ -216,14 +267,34 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
     @app.get("/api/funding/schemes")
     def funding_schemes(category: str | None = None, project_cost: float | None = None, limit: int = 10):
         try:
-            return {"schemes": FundingService().list_schemes(project_cost=project_cost, category=category, limit=min(limit, 20))}
+            return {
+                "schemes": FundingService().list_schemes(
+                    project_cost=project_cost,
+                    category=category,
+                    limit=min(limit, 20),
+                )
+            }
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"Schemes unavailable: {exc}") from exc
 
     @app.get("/api/funding/loans")
-    def funding_loans(category: str | None = None, loan_amount: float | None = None, state: str | None = None, district: str | None = None, limit: int = 10):
+    def funding_loans(
+        category: str | None = None,
+        loan_amount: float | None = None,
+        state: str | None = None,
+        district: str | None = None,
+        limit: int = 10,
+    ):
         try:
-            return {"loans": FundingService().list_loans(category=category, loan_amount=loan_amount, state=state, district=district, limit=min(limit, 20))}
+            return {
+                "loans": FundingService().list_loans(
+                    category=category,
+                    loan_amount=loan_amount,
+                    state=state,
+                    district=district,
+                    limit=min(limit, 20),
+                )
+            }
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"Loan plans unavailable: {exc}") from exc
 
@@ -232,11 +303,19 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
         try:
             location_id = request.location_id
             if not location_id:
-                matches = [x for x in InsightsService().locations() if (not request.state or x["state"] == request.state) and (not request.district or x["district"] == request.district)]
+                matches = [
+                    x for x in InsightsService().locations()
+                    if (not request.state or x["state"] == request.state)
+                    and (not request.district or x["district"] == request.district)
+                ]
                 if matches:
                     location_id = matches[0]["location_id"]
             if not location_id:
-                raise HTTPException(status_code=404, detail="Select a supported location or share your current location")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Select a supported location or share your current location",
+                )
+
             insight_data = InsightsService().by_location(location_id, request.category)
             if insight_data.get("available"):
                 try:
@@ -262,17 +341,28 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"Insights unavailable: {exc}") from exc
 
+    def _build_context(request: AnalyzeRequest) -> UserBusinessContext:
+        return UserBusinessContext(
+            available_capital=request.available_capital,
+            funding_available=request.funding_available,
+            interests=request.interests,
+            skills=request.skills,
+            experience_years=request.experience_years,
+            available_resources=request.available_resources,
+            infrastructure=request.infrastructure,
+            location=request.location,
+            location_id=request.location_id,
+            preferences=request.preferences,
+            asuse_overrides=request.asuse_overrides,
+            planned_workers=request.planned_workers,
+            business_age_years=request.business_age_years,
+            daily_work_hours=request.daily_work_hours,
+        )
+
     @app.post("/api/analyze", response_model=AnalyzeResponse)
     def analyze(request: AnalyzeRequest):
         svc = get_service()
-        context = UserBusinessContext(
-            available_capital=request.available_capital, funding_available=request.funding_available,
-            interests=request.interests, skills=request.skills, experience_years=request.experience_years,
-            available_resources=request.available_resources, infrastructure=request.infrastructure,
-            location=request.location, location_id=request.location_id, preferences=request.preferences,
-            asuse_overrides=request.asuse_overrides, planned_workers=request.planned_workers,
-            business_age_years=request.business_age_years, daily_work_hours=request.daily_work_hours,
-        )
+        context = _build_context(request)
         try:
             results = svc.recommend(context, top_k=request.top_k)
         except ValueError as exc:
@@ -281,6 +371,7 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
             raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}") from exc
         if not results:
             raise HTTPException(status_code=404, detail="No matching business profiles found")
+
         item = results[0]
         analysis = item["analysis"]
         explanation = analysis.explanation or {}
@@ -289,40 +380,80 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
         prediction = item.get("asuse_prediction")
         analysis_id = None
         persisted = False
+
         if request.persist:
             if not (request.user_id and request.business_id and request.location_id):
-                raise HTTPException(status_code=400, detail="user_id, business_id and location_id are required when persist=true")
+                raise HTTPException(
+                    status_code=400,
+                    detail="user_id, business_id and location_id are required when persist=true",
+                )
             try:
-                analysis_id = svc.persist_result(item, user_id=request.user_id, business_id=request.business_id, location_id=request.location_id)
+                analysis_id = svc.persist_result(
+                    item,
+                    user_id=request.user_id,
+                    business_id=request.business_id,
+                    location_id=request.location_id,
+                )
                 persisted = True
             except Exception as exc:
                 raise HTTPException(status_code=500, detail=f"Analysis persistence failed: {exc}") from exc
+
         return AnalyzeResponse(
             analysis_id=analysis_id,
-            business={"profile_id": profile.profile_id, "business_name": profile.business_name, "category": profile.category, "subcategory": profile.subcategory},
-            decision={"decision": analysis.decision, "overall_score": analysis.overall_score, "confidence": item.get("confidence"), "confidence_type": "data-quality confidence, not success probability"},
-            scores={"components": explanation.get("score_components", {}), "contributions": explanation.get("score_contributions", {}), "weights": explanation.get("weights", {})},
-            asuse=_jsonable(prediction), funding=_jsonable(item.get("funding")), strengths=explanation.get("strengths", []), concerns=explanation.get("concerns", []), recommendations=analysis.recommendations,
-            match={"semantic_score": match.semantic_score, "capital_score": match.capital_score, "final_score": match.final_score, "reasons": match.reasons},
-            engine_version=svc.engine_version(item), persisted=persisted,
+            business={
+                "profile_id": profile.profile_id,
+                "business_name": profile.business_name,
+                "category": profile.category,
+                "subcategory": profile.subcategory,
+            },
+            decision={
+                "decision": analysis.decision,
+                "overall_score": analysis.overall_score,
+                "confidence": item.get("confidence"),
+                "confidence_type": "data-quality confidence, not success probability",
+            },
+            scores={
+                "components": explanation.get("score_components", {}),
+                "contributions": explanation.get("score_contributions", {}),
+                "weights": explanation.get("weights", {}),
+            },
+            asuse=_jsonable(prediction),
+            funding=_jsonable(item.get("funding")),
+            strengths=explanation.get("strengths", []),
+            concerns=explanation.get("concerns", []),
+            recommendations=analysis.recommendations,
+            match={
+                "semantic_score": match.semantic_score,
+                "capital_score": match.capital_score,
+                "final_score": match.final_score,
+                "reasons": match.reasons,
+            },
+            engine_version=svc.engine_version(item),
+            persisted=persisted,
         )
 
     @app.get("/api/recommendations")
     def recommendations(request: AnalyzeRequest):
         svc = get_service()
-        context = UserBusinessContext(
-            available_capital=request.available_capital, funding_available=request.funding_available,
-            interests=request.interests, skills=request.skills, experience_years=request.experience_years,
-            available_resources=request.available_resources, infrastructure=request.infrastructure,
-            location=request.location, location_id=request.location_id, preferences=request.preferences,
-            asuse_overrides=request.asuse_overrides, planned_workers=request.planned_workers,
-            business_age_years=request.business_age_years, daily_work_hours=request.daily_work_hours,
-        )
+        context = _build_context(request)
         try:
             results = svc.recommend(context, top_k=request.top_k)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Recommendation failed: {exc}") from exc
-        return {"recommendations": [{"profile_id": item["profile_id"], "business_name": item["business_name"], "score": item["final_recommendation_score"], "decision": item["analysis"].decision, "confidence": item.get("confidence"), "asuse": _jsonable(item.get("asuse_prediction")), "explanation": item["analysis"].explanation} for item in results]}
+        return {
+            "recommendations": [
+                {
+                    "profile_id": item["profile_id"],
+                    "business_name": item["business_name"],
+                    "score": item["final_recommendation_score"],
+                    "decision": item["analysis"].decision,
+                    "confidence": item.get("confidence"),
+                    "asuse": _jsonable(item.get("asuse_prediction")),
+                    "explanation": item["analysis"].explanation,
+                }
+                for item in results
+            ]
+        }
 
     return app
 
