@@ -4,13 +4,38 @@ from .config import settings
 from .schemas import RetrievedDocument
 _model = None
 
+
 def _get_model():
     global _model
+
     if _model is None:
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(settings.embedding_model)
-    return _model
 
+        _model = SentenceTransformer(
+            settings.embedding_model
+        )
+
+    return _model
+def preload_model():
+    """
+    Load the embedding model during application startup
+    instead of waiting for the first chatbot request.
+    """
+    model = _get_model()
+
+    # Small validation to ensure the expected model is loaded.
+    test_embedding = model.encode(
+        "UdyamSetu startup check",
+        normalize_embeddings=True
+    )
+
+    if len(test_embedding) != 384:
+        raise RuntimeError(
+            f"Embedding model returned {len(test_embedding)} dimensions; "
+            "expected 384."
+        )
+
+    return model
 def _column(cursor, table: str, candidates: tuple[str, ...]) -> str | None:
     cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=%s", (table,))
     cols = {r[0] for r in cursor.fetchall()}
