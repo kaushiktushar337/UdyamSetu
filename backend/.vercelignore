@@ -1,7 +1,8 @@
-# Keep the runtime bundle small. Production uses DATABASE_URL for reference data.
+# Development/training material not required by the Vercel runtime
 data/
 ml_engine/training/
 tests/
+chatbot/tests/
 docs/
 .pytest_cache/
 __pycache__/
@@ -14,3 +15,8 @@ __pycache__/
 .git/
 .gitignore
 README.md
+seed_data/
+chatbot/cli_chat.py
+chatbot/generate_document_embeddings.py
+chatbot/message_embeddings.py
+DEPLOYMENT_NOTES.md
