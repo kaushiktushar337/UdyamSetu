@@ -23,6 +23,7 @@ def get_embedding_model():
         if _MODEL is None:
             # Keep tokenizer/thread overhead bounded on small CPU instances.
             os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+            os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
             try:
                 import torch
                 torch.set_num_threads(max(1, min(2, os.cpu_count() or 1)))

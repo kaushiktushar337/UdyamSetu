@@ -1,0 +1,20 @@
+# Vercel production bundle exclusions
+.git
+.github
+__pycache__
+*.py[cod]
+.pytest_cache
+.venv
+venv
+node_modules
+
+# ASUSE training-only data and artifacts
+data/asuse_2023_24_training.csv
+ml_engine/training/
+tests/
+
+# Documentation and local-only files
+docs/
+.env
+.env.*
+!.env.example
