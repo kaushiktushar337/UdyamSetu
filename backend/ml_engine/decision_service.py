@@ -21,7 +21,7 @@ class UdyamSetuDecisionService:
         self.funding_service = funding_service
 
     @classmethod
-    def from_database(cls, database_url: str | None = None, calibrator=None, asuse_model_path: str | None = "models/asuse_profitability.joblib") -> "UdyamSetuDecisionService":
+    def from_database(cls, database_url: str | None = None, calibrator=None, asuse_model_path: str | None = "models/asuse_profitability.json") -> "UdyamSetuDecisionService":
         profiles = BusinessProfileLoader(database_url).load_profiles()
         location_loader = LocationMetricsLoader(database_url)
         asuse_model = None

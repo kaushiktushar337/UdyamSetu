@@ -32,7 +32,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / '.env')
 DEFAULT_PROFILE_CSV = ROOT / "seed_data" / "business_reference_profiles_database_ready.csv"
-DEFAULT_MODEL_PATH = ROOT / "models" / "asuse_profitability.joblib"
+DEFAULT_MODEL_PATH = ROOT / "models" / "asuse_profitability.json"
 
 
 def _jsonable(value: Any) -> Any:
