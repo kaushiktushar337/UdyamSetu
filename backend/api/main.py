@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from chatbot.chat_service import ChatService
 from chatbot.conversation_manager import ConversationManager
 from chatbot.schemas import ChatRequest as BotChatRequest
+from chatbot.similarity_search import preload_model
 from ml_engine.decision_service import UdyamSetuDecisionService
 from ml_engine.recommendation_engine import UserBusinessContext
 from ml_engine.profile_loader import BusinessProfileLoader
@@ -98,20 +101,26 @@ class InsightRequest(BaseModel):
     district: str | None = None
     category: str = "Dairy"
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Initialize expensive services once when FastAPI starts.
 
-def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
-    app = FastAPI(title="UdyamSetu API", version="2.0.0")
-    origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "*").split(",") if x.strip()]
-    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=origins != ["*"], allow_methods=["*"], allow_headers=["*"])
-# ---------------------------------------------------------
-# EAGER SERVICE INITIALIZATION
-# ---------------------------------------------------------
-# Initialize the decision engine and chatbot during startup
-# instead of waiting for the first API request.
-# ---------------------------------------------------------
+    This keeps initialization out of module import time while
+    still preventing the first user request from paying the
+    model-loading cost.
+    """
 
     try:
-        app.state.decision_service = service or build_service()
+        print("UdyamSetu startup: loading decision engine...")
+
+        app.state.decision_service = build_service()
+
+        print("UdyamSetu startup: loading chatbot embedding model...")
+
+        preload_model()
+
+        print("UdyamSetu startup: creating chatbot service...")
 
         app.state.chat_service = ChatService(
             memory=ConversationManager(
@@ -119,11 +128,25 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
             )
         )
 
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to initialize UdyamSetu services: {exc}"
-        ) from exc
+        print("UdyamSetu startup: services loaded successfully.")
 
+    except Exception as exc:
+        print(f"UdyamSetu startup failed: {exc}")
+        raise
+
+    yield
+
+    print("UdyamSetu shutdown.")
+
+def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
+
+    app = FastAPI(
+        title="UdyamSetu API",
+        version="2.0.0",
+        lifespan=lifespan,
+    )
+    origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "*").split(",") if x.strip()]
+    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=origins != ["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ---------------------------------------------------------
 # SERVICE GETTERS
