@@ -139,7 +139,7 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
 
     def get_chat_service():
         return app.state.chat_service
-        @app.post("/api/chat")
+    @app.post("/api/chat")
     def chat(request: ChatApiRequest):
         try:
             result = get_chat_service().chat(BotChatRequest(message=request.message, conversation_id=request.conversation_id, user_id=request.user_id, location_text=request.location_text))
