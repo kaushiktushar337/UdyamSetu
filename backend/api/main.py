@@ -317,24 +317,6 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
                 )
 
             insight_data = InsightsService().by_location(location_id, request.category)
-            if insight_data.get("available"):
-                try:
-                    svc = get_service()
-                    ml_matches = svc.pipeline.matcher.match(
-                        f"Business category: {request.category}",
-                        available_capital=None,
-                        top_k=5,
-                    )
-                    insight_data["ml_business_matches"] = [
-                        {
-                            "business_name": m.profile.business_name,
-                            "subcategory": m.profile.subcategory,
-                            "semantic_score": m.semantic_score,
-                        }
-                        for m in ml_matches
-                    ]
-                except Exception:
-                    insight_data["ml_business_matches"] = []
             return insight_data
         except HTTPException:
             raise
