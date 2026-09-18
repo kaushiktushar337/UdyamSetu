@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from ml_engine.ises_service import ISESService
 import os
 from typing import Any
 
@@ -73,24 +73,67 @@ class InsightsService:
 
                 cur.execute("SELECT location_name, state, district FROM location_reference WHERE location_id = %s LIMIT 1", (location_id,))
                 loc = cur.fetchone()
+                ises_context = None
+
+                try:
+                    ises_context = ISESService(
+                        self.database_url
+                    ).get_for_location(
+                        location_id,
+                        category,
+                    )
+                except Exception:
+                    ises_context = None
                 return {
                     "available": True,
+
                     "location": {
                         "location_id": str(location_id),
                         "location_name": loc[0] if loc else None,
                         "state": loc[1] if loc else None,
                         "district": loc[2] if loc else None,
                     },
+
                     "category": category,
-                    "demand_score": float(row[1]) if row[1] is not None else None,
-                    "competition_score": float(row[2]) if row[2] is not None else None,
-                    "competition_count": round(float(row[3])) if row[3] is not None else None,
-                    "average_market_price": float(row[4]) if row[4] is not None else None,
-                    "opportunity_score": float(row[5]) if row[5] is not None else None,
-                    "data_date": row[6].isoformat() if row[6] else None,
-                    "metric_rows": int(row[7]),
-                    "top_opportunities": opportunities,
-                    "source_note": "Location-specific database metrics; verify assumptions before investment.",
+
+                    "demand_score":
+                        float(row[1])
+                        if row[1] is not None
+                        else None,
+
+                    "competition_score":
+                        float(row[2])
+                        if row[2] is not None
+                        else None,
+
+                    "competition_count":
+                        round(float(row[3]))
+                        if row[3] is not None
+                        else None,
+
+                    "average_market_price":
+                        float(row[4])
+                        if row[4] is not None
+                        else None,
+
+                    "opportunity_score":
+                        float(row[5])
+                        if row[5] is not None
+                        else None,
+
+                    "data_date":
+                        row[6].isoformat()
+                        if row[6]
+                        else None,
+
+                    "metric_rows":
+                        int(row[7]),
+
+                    "top_opportunities":
+                        opportunities,
+
+                    "ises_context":
+                        ises_context,
                 }
         finally:
             conn.close()

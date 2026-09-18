@@ -92,6 +92,10 @@ class UdyamSetuDecisionService:
     @staticmethod
     def engine_version(item: Dict[str, Any]) -> str:
         calibration = item.get("calibration")
+        combined = (
+            item.get("asuse_prediction") is not None
+            or item.get("ises_context") is not None
+        )
         if calibration is not None and calibration.model_used:
-            return f"decision-engine-v1+{calibration.model_version}"
-        return "decision-engine-v1"
+            return f"decision-engine-v3-combined+{calibration.model_version}" if combined else f"decision-engine-v1+{calibration.model_version}"
+        return "decision-engine-v3-combined" if combined else "decision-engine-v1"

@@ -1,9 +1,9 @@
 import { CheckCircle2 } from 'lucide-react'
 
 export default function KeyInsights({ data }) {
-  const best = data.mlBusinessMatches?.[0]
+  const best = data.topOpportunities?.[0]
   const bullets = [
-    best ? `${best.business_name} is the strongest business match for the selected category.` : 'No business match is available yet for this location.',
+    best ? `${best.business_name} has the strongest opportunity score among the available local matches.` : 'No business match is available yet for this location.',
     data.opportunityScore != null ? `The local opportunity score is ${Number(data.opportunityScore).toFixed(0)}/100.` : 'Opportunity scoring is not available for this area yet.',
     data.competitionScore != null ? `Competition is currently rated ${data.competitionScore >= 70 ? 'high' : data.competitionScore >= 40 ? 'medium' : 'low'} by the stored market metric.` : 'Competition data is not available yet.',
   ]

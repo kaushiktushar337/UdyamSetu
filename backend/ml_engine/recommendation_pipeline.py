@@ -1,7 +1,8 @@
 """End-to-end recommendation pipeline with optional learnable calibration."""
 from __future__ import annotations
-
+import os
 from typing import Any, Dict, List, Optional
+from .ises_service import ISESService
 
 from .business_matcher import BusinessMatcher, build_user_business_query
 from .profile_loader import BusinessProfile
@@ -27,7 +28,26 @@ class BusinessRecommendationPipeline:
         self.calibrator = calibrator or ScoreCalibrator()
         self.location_loader = location_loader
         self.asuse_model = asuse_model
+        self.ises_service = (
+            ISESService()
+            if os.getenv("DATABASE_URL")
+            else None
+            )
+    def _resolve_ises_context(
+        self,
+        context,
+        profile,
+    ):
+        if (
+            self.ises_service is None
+            or not context.location_id
+        ):
+            return None
 
+        return self.ises_service.get_for_location(
+            context.location_id,
+            profile.category or "",
+        )
     def _resolve_location_metrics(self, context, profile, supplied):
         if supplied is not None:
             return supplied
@@ -53,6 +73,7 @@ class BusinessRecommendationPipeline:
         for match in matches:
             resolved_metrics = self._resolve_location_metrics(context, match.profile, location_metrics)
             generated = self.recommendation_engine.generate_inputs(context, match, resolved_metrics)
+            ises_context = self._resolve_ises_context(context, match.profile)
             analysis_input = BusinessAnalysisInput(
                 financial=generated.financial,
                 market=generated.market,
@@ -62,8 +83,14 @@ class BusinessRecommendationPipeline:
             asuse_prediction = None
             if self.asuse_model is not None:
                 asuse_prediction = self.asuse_model.predict(context, match.profile, generated)
-            analysis = calculate_business_analysis(analysis_input, asuse_prediction=asuse_prediction)
-            features = self.feature_extractor.extract(context, match, generated, analysis)
+            analysis = calculate_business_analysis(
+                analysis_input,
+                asuse_prediction=asuse_prediction,
+                ises_context=ises_context,
+            )
+            features = self.feature_extractor.extract(
+                context, match, generated, analysis, ises_context=ises_context
+            )
             calibration = self.calibrator.predict(features, analysis.overall_score)
             results.append({
                 "profile_id": match.profile.profile_id,
@@ -75,6 +102,7 @@ class BusinessRecommendationPipeline:
                 "features": features,
                 "calibration": calibration,
                 "asuse_prediction": asuse_prediction,
+                "ises_context": ises_context,
                 "final_recommendation_score": analysis.overall_score,
                 "explanation": analysis.explanation,
             })
