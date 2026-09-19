@@ -87,6 +87,7 @@ class BusinessRecommendationPipeline:
                 analysis_input,
                 asuse_prediction=asuse_prediction,
                 ises_context=ises_context,
+                location_metrics=resolved_metrics,
             )
             features = self.feature_extractor.extract(
                 context, match, generated, analysis, ises_context=ises_context

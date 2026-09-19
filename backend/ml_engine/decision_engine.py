@@ -54,7 +54,62 @@ def _ises_score(ises_context):
         return None
 
 
-def _build_explanation(financial, market, operational, risk, asuse_prediction, ises_context, weights, overall, decision):
+def _extract_market_context(ises_context, location_metrics=None):
+    """Extract structured market context from ISES and location metrics."""
+    context = {
+        "data_sources": [],
+        "data_quality": "limited",
+        "category_stats": {},
+        "available_indicators": []
+    }
+
+    # Check ISES data
+    if ises_context and isinstance(ises_context, dict):
+        context["data_sources"].append("ISES 2022")
+
+        # Extract key metrics
+        metrics = [
+            ("ises_profit_business_pct", "profit_business_pct"),
+            ("ises_avg_monthly_sales", "avg_monthly_sales"),
+            ("ises_avg_workers", "avg_workers"),
+            ("ises_bank_account_pct", "bank_account_pct"),
+            ("ises_business_loan_pct", "business_loan_pct"),
+            ("ises_competitor_monitoring_pct", "competitor_monitoring_pct"),
+        ]
+
+        for metric_key, display_key in metrics:
+            if metric_key in ises_context:
+                context["category_stats"][display_key] = ises_context[metric_key]
+                context["available_indicators"].append(display_key)
+
+        if context["available_indicators"]:
+            context["data_quality"] = "good"
+
+    # Add location metrics if available
+    if location_metrics and isinstance(location_metrics, dict):
+        context["data_sources"].append("Local Market Metrics")
+
+        location_stats = {
+            "demand_score": location_metrics.get("demand_score"),
+            "competition_score": location_metrics.get("competition_score"),
+            "opportunity_score": location_metrics.get("opportunity_score"),
+            "competition_count": location_metrics.get("competition_count"),
+        }
+
+        for key, value in location_stats.items():
+            if value is not None:
+                context["category_stats"][key] = value
+                context["available_indicators"].append(key)
+
+    # Clean up
+    if not context["data_sources"]:
+        context["data_sources"] = ["No local data available"]
+        context["data_quality"] = "extrapolated"
+
+    return context
+
+
+def _build_explanation(financial, market, operational, risk, asuse_prediction, ises_context, weights, overall, decision, location_metrics=None):
     """Build a frontend-ready, human-readable explanation of the decision.
 
     The explanation describes score contributions and notable strengths/concerns.
@@ -115,6 +170,9 @@ def _build_explanation(financial, market, operational, risk, asuse_prediction, i
     if asuse_info and not asuse_info["applicable"]:
         concerns.append("The historical profitability model was not applied because this business is outside its supported scope.")
 
+    # Extract market context from ISES and location metrics
+    market_context = _extract_market_context(ises_context, location_metrics)
+
     return {
         "decision": decision,
         "overall_score": round(float(overall), 2),
@@ -128,11 +186,12 @@ def _build_explanation(financial, market, operational, risk, asuse_prediction, i
             "available": ises_score is not None,
             "environment_score": ises_score,
         },
+        "market_context": market_context,
         "summary": f"Final score {overall:.1f}/100: {decision}.",
     }
 
 
-def calculate_business_analysis(data: BusinessAnalysisInput, weights=None, asuse_prediction=None, ises_context=None):
+def calculate_business_analysis(data: BusinessAnalysisInput, weights=None, asuse_prediction=None, ises_context=None, location_metrics=None):
     weights = dict(DEFAULT_FINAL_WEIGHTS if weights is None else weights)
 
     asuse_score_available = (
@@ -236,7 +295,7 @@ def calculate_business_analysis(data: BusinessAnalysisInput, weights=None, asuse
 
     recommendations = list(dict.fromkeys(recommendations))
     explanation = _build_explanation(
-        financial, market, operational, risk, asuse_prediction, ises_context, weights, overall, decision
+        financial, market, operational, risk, asuse_prediction, ises_context, weights, overall, decision, location_metrics
     )
 
     return BusinessAnalysisResult(

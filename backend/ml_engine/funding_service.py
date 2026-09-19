@@ -238,6 +238,86 @@ class FundingService:
             ),
         }
 
+    def generate_next_steps(self, funding_result: dict, analysis_result: dict = None) -> list[dict[str, Any]]:
+        """Generate prioritized next steps with links and timelines."""
+        next_steps = []
+        priority_counter = 1
+
+        schemes = funding_result.get("schemes", [])
+        loans = funding_result.get("loans", [])
+
+        # Check if there's a funding gap
+        funding_gap = None
+        if analysis_result and hasattr(analysis_result, 'financial'):
+            funding_gap = getattr(analysis_result.financial, 'funding_gap', None)
+
+        # Step 1: Government scheme (highest priority if available)
+        if schemes:
+            top_scheme = schemes[0]
+            next_steps.append({
+                "priority": priority_counter,
+                "action": f"Apply for {top_scheme['scheme_name']}",
+                "rationale": f"Your project cost fits the scheme range with {top_scheme['interest_rate']}% interest rate",
+                "link": top_scheme.get('official_portal_url'),
+                "estimated_timeline": f"{top_scheme.get('tenure_months', 60)//12 * 6 + 2}-{(top_scheme.get('tenure_months', 60)//12 + 1) * 8} weeks for processing",
+                "type": "scheme"
+            })
+            priority_counter += 1
+
+        # Step 2: Bank loan if funding gap exists
+        if funding_gap and funding_gap > 0 and loans:
+            eligible_loans = [l for l in loans if l.get('eligible_on_supplied_data', True)]
+            if eligible_loans:
+                top_loan = eligible_loans[0]
+                next_steps.append({
+                    "priority": priority_counter,
+                    "action": f"Apply for {top_loan['plan_name']}",
+                    "rationale": f"Funding gap of ₹{funding_gap:,.0f} can be covered through this loan",
+                    "link": top_loan.get('source_url'),
+                    "estimated_timeline": "2-4 weeks for bank approval",
+                    "type": "loan"
+                })
+                priority_counter += 1
+
+        # Step 3: Documentation preparation (always needed)
+        next_steps.append({
+            "priority": priority_counter,
+            "action": "Prepare required documentation",
+            "rationale": "Gather identity proof, address proof, business plan, and financial documents",
+            "link": None,
+            "estimated_timeline": "1-2 weeks",
+            "type": "preparation"
+        })
+        priority_counter += 1
+
+        # Step 4: Skill/training if operational score is low
+        if analysis_result and hasattr(analysis_result, 'operational'):
+            op_score = getattr(analysis_result.operational, 'operational_score', 100)
+            if op_score < 65:
+                next_steps.append({
+                    "priority": priority_counter,
+                    "action": "Consider skill training or apprenticeship",
+                    "rationale": "Operational readiness can be improved with practical experience",
+                    "link": None,
+                    "estimated_timeline": "2-4 weeks",
+                    "type": "training"
+                })
+
+        # Add business setup steps
+        next_steps.append({
+            "priority": priority_counter + 1 if priority_counter > 3 else 4,
+            "action": "Complete business registration",
+            "rationale": "Register your business (UDYAM, GST if applicable) before applying for major schemes",
+            "link": "https://udyamregistration.gov.in",
+            "estimated_timeline": "1-3 days for UDYAM registration",
+            "type": "registration"
+        })
+
+        # Sort by priority
+        next_steps.sort(key=lambda x: x["priority"])
+
+        return next_steps
+
     def chat_context(self, message: str, location_text: str | None = None) -> str:
         category = self.detect_category(message)
         project_cost = self._parse_amount(message)
