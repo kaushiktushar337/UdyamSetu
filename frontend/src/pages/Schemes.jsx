@@ -10,6 +10,15 @@ import CurrentLocationButton from '../components/common/CurrentLocationButton'
 
 const initialProfile = { category: 'Dairy', projectCost: '', monthlyIncome: '', loanAmount: '', state: '', district: '', locationText: '' }
 
+const hasEnteredDetails = (profile) => [
+  profile.projectCost,
+  profile.monthlyIncome,
+  profile.loanAmount,
+  profile.state,
+  profile.district,
+  profile.locationText,
+].some((value) => String(value || '').trim())
+
 export default function Schemes() {
   const { t } = useLanguage()
   const [mode, setMode] = useState('scheme')
@@ -28,7 +37,9 @@ export default function Schemes() {
     setLoading(true); setError('')
     try {
       const data = await getFundingRecommendations({ category: profile.category, project_cost: Number(profile.projectCost) || null, loan_amount: Number(profile.loanAmount) || null, state: profile.state || null, district: profile.district || null, limit: 8 })
-      setRecommendations(mode === 'scheme' ? (data?.schemes || []) : (data?.loans || []))
+      const results = mode === 'scheme' ? (data?.schemes || []) : (data?.loans || [])
+      const detailsEntered = hasEnteredDetails(profile)
+      setRecommendations(results.map((item) => ({ ...item, match_score: detailsEntered ? item.match_score : 0 })))
     } catch (requestError) {
       setRecommendations([]); setError(friendlyError(requestError, 'Could not load funding options.'))
     } finally { setLoading(false) }
