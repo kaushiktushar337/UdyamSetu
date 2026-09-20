@@ -3,7 +3,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS ises_city_sector_metrics (
     metric_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    location_id TEXT NOT NULL,
+    location_id UUID NOT NULL,
 
     city VARCHAR(100) NOT NULL,
 
@@ -62,14 +62,6 @@ CREATE TABLE IF NOT EXISTS ises_city_sector_metrics (
 
     UNIQUE(location_id, sector, data_date)
 );
-
-
--- Keep the ISES table compatible with the existing UdyamSetu location IDs.
--- Some deployments use integer location IDs while older schema files used UUIDs.
-ALTER TABLE ises_city_sector_metrics
-    ALTER COLUMN location_id TYPE TEXT
-    USING location_id::TEXT;
-
 
 CREATE INDEX IF NOT EXISTS
 idx_ises_city_sector_location

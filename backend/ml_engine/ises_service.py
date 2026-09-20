@@ -41,14 +41,7 @@ class ISESService:
                 "food processing",
                 "rural manufacturing",
                 "agriculture",
-                "agriculture allied",
                 "processing",
-                "food",
-                "dairy",
-                "bakery",
-                "garments",
-                "furniture",
-                "handicraft",
             ]
         ):
             return "Production"
@@ -78,46 +71,6 @@ class ISESService:
             return "Other Services"
 
         return None
-
-    @staticmethod
-    def environment_score(metrics: dict[str, Any]) -> Optional[float]:
-        """Build a 0-100 business-environment signal from available ISES indicators.
-
-        This is an internal UdyamSetu composite, not an official survey indicator.
-        Components are renormalized when a metric is unavailable.
-        """
-        groups = [
-            ("profit_business_pct", 0.30, False),
-            ("bank_account_pct", 0.10, False),
-            ("business_loan_pct", 0.10, False),
-            ("competitor_monitoring_pct", 0.08, False),
-            ("customer_feedback_pct", 0.08, False),
-            ("supplier_market_info_pct", 0.08, False),
-            ("monthly_budget_pct", 0.08, False),
-            ("sales_target_pct", 0.08, False),
-            ("computer_use_pct", 0.04, False),
-            ("smartphone_use_pct", 0.04, False),
-            ("electricity_grid_pct", 0.05, False),
-            ("water_use_pct", 0.03, False),
-            ("power_outage_pct", 0.02, True),
-        ]
-        numerator = 0.0
-        denominator = 0.0
-        for name, weight, inverse in groups:
-            value = metrics.get(name)
-            if value is None:
-                continue
-            try:
-                score = max(0.0, min(100.0, float(value)))
-            except (TypeError, ValueError):
-                continue
-            if inverse:
-                score = 100.0 - score
-            numerator += score * weight
-            denominator += weight
-        if denominator <= 0:
-            return None
-        return round(numerator / denominator, 2)
 
     def get_for_location(
         self,
@@ -214,10 +167,10 @@ class ISESService:
                 )
 
                 if result["data_date"]:
-                    result["data_date"] = result["data_date"].isoformat()
+                    result["data_date"] = (
+                        result["data_date"].isoformat()
+                    )
 
-                result["environment_score"] = self.environment_score(result)
-                result.pop("data_source", None)
                 return result
 
         finally:

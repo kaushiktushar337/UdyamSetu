@@ -136,34 +136,6 @@ def weighted_count(df: pd.DataFrame) -> Optional[float]:
     return round(float(weights.sum()), 2)
 
 
-def category_rate(
-    df: pd.DataFrame,
-    column: str,
-    target: str,
-) -> Optional[float]:
-    """Weighted percentage for a labelled categorical response."""
-    values = df[column].astype(str).str.strip()
-    weights = clean_numeric(df["wstrict"])
-
-    valid = (
-        values.notna()
-        & ~values.isin(["", "nan", "NaN", "Don't know (spontaneous)", "Refusal (spontaneous)"])
-        & weights.notna()
-        & (weights > 0)
-    )
-    if not valid.any():
-        return None
-
-    values = values.loc[valid]
-    weights = weights.loc[valid]
-    denominator = weights.sum()
-    if denominator <= 0:
-        return None
-
-    numerator = weights.loc[values.eq(target)].sum()
-    return round(float(numerator / denominator * 100), 2)
-
-
 def sector_mask(
     df: pd.DataFrame,
     sector_column: str,

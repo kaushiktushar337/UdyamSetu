@@ -44,10 +44,10 @@ export default function BusinessInsights() {
     competitionScore: data.competition_score,
     competitionCount: data.competition_count,
     opportunityScore: data.opportunity_score,
-    localEnvironmentScore: data.local_environment_score,
     averageMarketPrice: data.average_market_price,
     dataDate: data.data_date,
     topOpportunities: data.top_opportunities || [],
+    localEnvironmentScore: data.local_environment_score,
     location: data.location,
   } : null
 

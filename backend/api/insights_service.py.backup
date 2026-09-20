@@ -155,121 +155,36 @@ class InsightsService:
 
         try:
             with conn.cursor() as cur:
-                # First, get one row per subcategory, prioritizing the most reliable data source
-                # This prevents double-counting when multiple data sources exist for the same subcategory
+                # One row per subcategory exists in the market-metrics table.
+                # Aggregate them using estimated business count instead of a
+                # simple AVG, which prevents a small subcategory from having
+                # the same influence as a large one.
                 cur.execute(
                     """
                     SELECT
                         business_category,
-                        subcategory,
-                        demand_score,
-                        competition_score,
-                        opportunity_score,
-                        competition_count,
-                        average_market_price,
-                        data_date
-                    FROM (
-                        SELECT
-                            business_category,
-                            subcategory,
-                            demand_score,
-                            competition_score,
-                            opportunity_score,
-                            competition_count,
-                            average_market_price,
-                            data_date,
-                            ROW_NUMBER() OVER (
-                                PARTITION BY subcategory
-                                ORDER BY
-                                    CASE
-                                        WHEN data_source = 'UdyamSetu synthetic prototype dataset' THEN 1
-                                        WHEN data_source = 'ASUSE 2023-24 profile-aligned proxy' THEN 2
-                                        WHEN data_source = 'ASUSE 2023-24 derived' THEN 3
-                                        ELSE 4
-                                    END
-                            ) as rn
-                        FROM location_business_metrics
-                        WHERE location_id = %s
-                          AND LOWER(business_category) = LOWER(%s)
-                          AND COALESCE(data_source, '') <> 'UdyamSetu development seed'
-                    ) ranked
-                    WHERE rn = 1
+                        SUM(COALESCE(competition_count, 0)),
+                        SUM(demand_score * COALESCE(NULLIF(competition_count, 0), 1))
+                            / NULLIF(SUM(COALESCE(NULLIF(competition_count, 0), 1)), 0),
+                        SUM(competition_score * COALESCE(NULLIF(competition_count, 0), 1))
+                            / NULLIF(SUM(COALESCE(NULLIF(competition_count, 0), 1)), 0),
+                        SUM(average_market_price * COALESCE(NULLIF(competition_count, 0), 1))
+                            / NULLIF(SUM(CASE WHEN average_market_price IS NOT NULL THEN COALESCE(NULLIF(competition_count, 0), 1) ELSE 0 END), 0),
+                        SUM(opportunity_score * COALESCE(NULLIF(competition_count, 0), 1))
+                            / NULLIF(SUM(COALESCE(NULLIF(competition_count, 0), 1)), 0),
+                        MAX(data_date),
+                        COUNT(*)
+                    FROM location_business_metrics
+                    WHERE location_id = %s
+                      AND LOWER(business_category) = LOWER(%s)
+                      AND COALESCE(data_source, '') NOT IN ('UdyamSetu development seed', 'ASUSE 2023-24 profile-aligned proxy', 'ASUSE 2023-24 derived')
+                    GROUP BY business_category
                     """,
                     (location_id, category),
                 )
+                row = cur.fetchone()
 
-                # Now compute weighted averages from the deduplicated subcategory data
-                # One row per subcategory exists after deduplication.
-                # Aggregate them using estimated business count instead of a
-                # simple AVG, which prevents a small subcategory from having
-                # the same influence as a large one.
-                subcategory_rows = cur.fetchall()
-
-                if not subcategory_rows:
-                    # No data found for this location/category combination
-                    return {
-                        "location_id": str(location_id),
-                        "location_name": None,
-                        "state": None,
-                        "district": None,
-                        "category": requested_category or category,
-                        "normalized_category": category,
-                        "demand_score": None,
-                        "competition_score": None,
-                        "market_score": None,
-                        "competition_count": 0,
-                        "average_market_price": None,
-                        "opportunity_score": None,
-                        "market_opportunity_score": None,
-                        "local_environment_score": None,
-                        "data_date": None,
-                        "metric_rows": 0,
-                        "top_opportunities": [],
-                    }
-
-                # Compute weighted aggregates
-                total_competition_count = sum(float(row[5]) for row in subcategory_rows if row[5] is not None)
-                weighted_demand_sum = sum(
-                    float(row[2]) * float(row[5]) if row[2] is not None and row[5] is not None else 0
-                    for row in subcategory_rows
-                )
-                weighted_competition_sum = sum(
-                    float(row[3]) * float(row[5]) if row[3] is not None and row[5] is not None else 0
-                    for row in subcategory_rows
-                )
-                weighted_opportunity_sum = sum(
-                    float(row[4]) * float(row[5]) if row[4] is not None and row[5] is not None else 0
-                    for row in subcategory_rows
-                )
-
-                # For average market price, we only weight by subcategories that have price data
-                price_rows = [row for row in subcategory_rows if row[6] is not None]
-                total_price_weight = sum(float(row[5]) for row in price_rows if row[5] is not None)
-                weighted_price_sum = sum(
-                    float(row[6]) * float(row[5]) if row[6] is not None and row[5] is not None else 0
-                    for row in price_rows
-                )
-
-                demand_score = (
-                    weighted_demand_sum / total_competition_count
-                    if total_competition_count > 0 else None
-                )
-                competition_score = (
-                    weighted_competition_sum / total_competition_count
-                    if total_competition_count > 0 else None
-                )
-                opportunity_score = (
-                    weighted_opportunity_sum / total_competition_count
-                    if total_competition_count > 0 else None
-                )
-                average_market_price = (
-                    weighted_price_sum / total_price_weight
-                    if total_price_weight > 0 else None
-                )
-
-                data_date = max((r[7] for r in subcategory_rows if r[7] is not None), default=None)
-
-                if not subcategory_rows:
+                if not row:
                     return {
                         "available": False,
                         "category": requested_category or category,
@@ -306,47 +221,8 @@ class InsightsService:
                 # Retrieve all subcategory metrics first, then collapse duplicate
                 # business names. The reference dataset contains some repeated
                 # names across profiles; showing them twice is not useful to the user.
-                # We use the same deduplication logic as above to avoid double-counting
-                # due to multiple data sources per subcategory.
                 cur.execute(
                     """
-                    WITH deduplicated_metrics AS (
-                        SELECT
-                            business_category,
-                            subcategory,
-                            demand_score,
-                            competition_score,
-                            opportunity_score,
-                            competition_count,
-                            average_market_price,
-                            data_date
-                        FROM (
-                            SELECT
-                                business_category,
-                                subcategory,
-                                demand_score,
-                                competition_score,
-                                opportunity_score,
-                                competition_count,
-                                average_market_price,
-                                data_date,
-                                ROW_NUMBER() OVER (
-                                    PARTITION BY subcategory
-                                    ORDER BY
-                                        CASE
-                                            WHEN data_source = 'UdyamSetu synthetic prototype dataset' THEN 1
-                                            WHEN data_source = 'ASUSE 2023-24 profile-aligned proxy' THEN 2
-                                            WHEN data_source = 'ASUSE 2023-24 derived' THEN 3
-                                            ELSE 4
-                                        END
-                                ) as rn
-                            FROM location_business_metrics
-                            WHERE location_id = %s
-                              AND LOWER(business_category) = LOWER(%s)
-                              AND COALESCE(data_source, '') <> 'UdyamSetu development seed'
-                        ) ranked
-                        WHERE rn = 1
-                    )
                     SELECT
                         p.business_name,
                         p.subcategory,
@@ -354,7 +230,7 @@ class InsightsService:
                         m.demand_score,
                         m.competition_score,
                         m.competition_count
-                    FROM deduplicated_metrics m
+                    FROM location_business_metrics m
                     JOIN business_reference_profiles p
                       ON LOWER(p.category) = LOWER(m.business_category)
                      AND (
@@ -362,6 +238,9 @@ class InsightsService:
                           OR m.subcategory IS NULL
                           OR p.subcategory IS NULL
                      )
+                    WHERE m.location_id = %s
+                      AND LOWER(m.business_category) = LOWER(%s)
+                      AND COALESCE(m.data_source, '') NOT IN ('UdyamSetu development seed', 'ASUSE 2023-24 profile-aligned proxy', 'ASUSE 2023-24 derived')
                     ORDER BY m.opportunity_score DESC NULLS LAST,
                              m.demand_score DESC NULLS LAST,
                              p.business_name

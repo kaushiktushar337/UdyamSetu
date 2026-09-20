@@ -23,9 +23,6 @@ class ChatRequest:
     user_id: Optional[str] = None
     location_text: Optional[str] = None
     funding_context: Optional[str] = None
-    # Enhanced context for personalized responses
-    analysis_context: Optional[Dict[str, Any]] = None
-    business_id: Optional[str] = None
 
 @dataclass
 class ChatResponse:

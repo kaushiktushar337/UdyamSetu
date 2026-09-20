@@ -73,7 +73,6 @@ class BusinessRecommendationPipeline:
         for match in matches:
             resolved_metrics = self._resolve_location_metrics(context, match.profile, location_metrics)
             generated = self.recommendation_engine.generate_inputs(context, match, resolved_metrics)
-            ises_context = self._resolve_ises_context(context, match.profile)
             analysis_input = BusinessAnalysisInput(
                 financial=generated.financial,
                 market=generated.market,
@@ -83,15 +82,8 @@ class BusinessRecommendationPipeline:
             asuse_prediction = None
             if self.asuse_model is not None:
                 asuse_prediction = self.asuse_model.predict(context, match.profile, generated)
-            analysis = calculate_business_analysis(
-                analysis_input,
-                asuse_prediction=asuse_prediction,
-                ises_context=ises_context,
-                location_metrics=resolved_metrics,
-            )
-            features = self.feature_extractor.extract(
-                context, match, generated, analysis, ises_context=ises_context
-            )
+            analysis = calculate_business_analysis(analysis_input, asuse_prediction=asuse_prediction)
+            features = self.feature_extractor.extract(context, match, generated, analysis)
             calibration = self.calibrator.predict(features, analysis.overall_score)
             results.append({
                 "profile_id": match.profile.profile_id,
@@ -103,7 +95,6 @@ class BusinessRecommendationPipeline:
                 "features": features,
                 "calibration": calibration,
                 "asuse_prediction": asuse_prediction,
-                "ises_context": ises_context,
                 "final_recommendation_score": analysis.overall_score,
                 "explanation": analysis.explanation,
             })

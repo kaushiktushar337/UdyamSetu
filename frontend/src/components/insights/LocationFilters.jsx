@@ -4,8 +4,8 @@ import { useLanguage } from '../../context/LanguageContext'
 import { getLocations, friendlyError } from '../../services/api'
 import CurrentLocationButton from '../common/CurrentLocationButton'
 
-const fallback = { state: 'Uttar Pradesh', district: 'Prayagraj', block: 'Soraon', category: 'Dairy', locationId: null, locationText: '' }
-const categories = ['Dairy', 'Retail', 'Food Processing', 'Textiles', 'Services', 'Agriculture-linked activity']
+const fallback = { state: 'Uttar Pradesh', district: 'Prayagraj', block: 'Prayagraj', category: 'Food Processing', locationId: null, locationText: '' }
+const categories = ['Food Processing', 'Manufacturing', 'Agriculture Allied', 'Services', 'Rural Manufacturing']
 
 function labelFor(location) {
   return [location.location_name, location.district, location.state].filter(Boolean).join(', ')

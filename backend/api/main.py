@@ -91,9 +91,6 @@ class ChatApiRequest(BaseModel):
     conversation_id: str | None = None
     user_id: str | None = None
     location_text: str | None = None
-    # Enhanced context for personalized responses
-    analysis_context: dict | None = None
-    business_id: str | None = None
 
 
 class FundingRequest(BaseModel):
@@ -114,7 +111,7 @@ class InsightRequest(BaseModel):
     location_id: str | None = None
     state: str | None = None
     district: str | None = None
-    category: str = "Dairy"
+    category: str = "Food Processing"
 
 
 @asynccontextmanager
@@ -197,8 +194,6 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
                     conversation_id=request.conversation_id,
                     user_id=request.user_id,
                     location_text=request.location_text,
-                    analysis_context=request.analysis_context,
-                    business_id=request.business_id,
                 )
             )
             return _jsonable(result)
@@ -417,11 +412,6 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
             },
             engine_version=svc.engine_version(item),
             persisted=persisted,
-            # Enhanced fields for actionable guidance
-            alternatives=item.get("alternatives", []),
-            market_context=explanation.get("market_context"),
-            operational_guidance=_jsonable(getattr(analysis.operational, 'guidance', None)) if analysis.operational else None,
-            next_steps=item.get("next_steps", []),
         )
 
     @app.get("/api/recommendations")

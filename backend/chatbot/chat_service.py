@@ -36,14 +36,11 @@ class ChatService:
 
         try:
             answer = self.generator.generate(
-                user_message=message, context=context, history=history,
-                location_text=request.location_text,
-                analysis_context=request.analysis_context, business_id=request.business_id,
+                user_message=message, context=context, history=history, location_text=request.location_text
             )
         except TypeError as exc:
             # Keep compatibility with lightweight test/custom generators that use the original signature.
-            known = {"location_text", "analysis_context", "business_id"}
-            if not any(p in str(exc) for p in known):
+            if "location_text" not in str(exc):
                 raise
             answer = self.generator.generate(user_message=message, context=context, history=history)
 

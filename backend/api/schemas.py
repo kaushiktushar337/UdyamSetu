@@ -40,8 +40,3 @@ class AnalyzeResponse(BaseModel):
     match: Dict[str, Any]
     engine_version: str
     persisted: bool = False
-    # Enhanced response fields for actionable guidance
-    alternatives: List[Dict[str, Any]] = Field(default_factory=list, description="Top 2-3 alternative recommendations with reasoning")
-    market_context: Optional[Dict[str, Any]] = Field(default=None, description="Local market intelligence from ASUSE/ISES data")
-    operational_guidance: Optional[Dict[str, Any]] = Field(default=None, description="Infrastructure, staffing, timeline requirements")
-    next_steps: List[Dict[str, Any]] = Field(default_factory=list, description="Prioritized action items with links")

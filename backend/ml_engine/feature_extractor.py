@@ -1,9 +1,8 @@
 """Feature extraction contract for UdyamSetu's learnable calibration layer.
 
 The extractor turns one recommendation into a stable numeric feature vector.
-It deliberately uses values already produced by the existing matcher,
-explainable decision engines, and the optional local business-environment
-context; it does not replace those engines.
+It deliberately uses values already produced by the existing matcher and
+explainable decision engines; it does not replace those engines.
 """
 from __future__ import annotations
 
@@ -96,7 +95,7 @@ def _profile_completeness(profile) -> float:
 class FeatureExtractor:
     """Build the versioned feature vector used by the calibration model."""
 
-    def extract(self, context, match, generated, analysis, ises_context=None) -> FeatureVector:
+    def extract(self, context, match, generated, analysis) -> FeatureVector:
         profile = match.profile
         financial = generated.financial
         market = generated.market
@@ -132,29 +131,4 @@ class FeatureExtractor:
             "profile_data_completeness": _profile_completeness(profile),
             "location_data_available": 100.0 if generated.explanation.get("market_data_available") else 0.0,
         }
-
-        # ISES features are retained for future model training. They do not
-        # alter the rule-based score directly; the current ISES composite is
-        # already incorporated by the decision engine.
-        ises = ises_context or {}
-        values.update({
-            "ises_profit_business_pct": _clamp(ises.get("profit_business_pct")),
-            "ises_avg_monthly_sales": max(0.0, _num(ises.get("avg_regular_month_sales"))),
-            "ises_avg_workers": max(0.0, _num(ises.get("avg_workers"))),
-            "ises_bank_account_pct": _clamp(ises.get("bank_account_pct")),
-            "ises_business_loan_pct": _clamp(ises.get("business_loan_pct")),
-            "ises_loan_application_pct": _clamp(ises.get("loan_application_pct")),
-            "ises_competitor_monitoring_pct": _clamp(ises.get("competitor_monitoring_pct")),
-            "ises_customer_feedback_pct": _clamp(ises.get("customer_feedback_pct")),
-            "ises_supplier_market_info_pct": _clamp(ises.get("supplier_market_info_pct")),
-            "ises_monthly_budget_pct": _clamp(ises.get("monthly_budget_pct")),
-            "ises_sales_target_pct": _clamp(ises.get("sales_target_pct")),
-            "ises_electricity_use_pct": _clamp(ises.get("electricity_use_pct")),
-            "ises_power_outage_pct": _clamp(ises.get("power_outage_pct")),
-            "ises_computer_use_pct": _clamp(ises.get("computer_use_pct")),
-            "ises_smartphone_use_pct": _clamp(ises.get("smartphone_use_pct")),
-            "ises_contractual_input_pct": _clamp(ises.get("contractual_input_purchase_pct")),
-            "ises_data_available": 100.0 if ises_context else 0.0,
-        })
-
         return FeatureVector(FEATURE_SCHEMA_VERSION, values)
