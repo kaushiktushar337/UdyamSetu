@@ -1,17 +1,22 @@
 import { Gauge, TrendingUp, IndianRupee, Users } from 'lucide-react'
 import MetricCard from '../common/MetricCard'
 
-function value(value, suffix = '') {
-  return value == null ? '—' : `${Number(value).toFixed(0)}${suffix}`
+function score(value) {
+  return value == null ? '—' : `${Number(value).toFixed(0)}/100`
+}
+
+function price(value) {
+  if (value == null) return 'Not available'
+  return `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
 export default function MarketOverview({ data }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <MetricCard icon={TrendingUp} label="Demand" value={value(data.demandScore, '/100')} helper="Local market signal" />
-      <MetricCard icon={Gauge} label="Opportunity" value={value(data.opportunityScore, '/100')} helper="Combined market signal" tone="accent" />
-      <MetricCard icon={Users} label="Competition" value={value(data.competitionScore, '/100')} helper={`${data.competitionCount == null ? '—' : Number(data.competitionCount).toLocaleString('en-IN')} estimated businesses`} />
-      <MetricCard icon={IndianRupee} label="Market price" value={data.averageMarketPrice == null ? '—' : `₹${Number(data.averageMarketPrice).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`} helper={data.averageMarketPrice == null ? 'No reliable local benchmark' : 'Local benchmark'} />
+      <MetricCard icon={TrendingUp} label="Demand" value={score(data.demandScore)} helper="Local demand signal" />
+      <MetricCard icon={Gauge} label="Opportunity" value={score(data.opportunityScore)} helper="Overall market opportunity" tone="accent" />
+      <MetricCard icon={Users} label="Competition" value={score(data.competitionScore)} helper="Relative competitive pressure" />
+      <MetricCard icon={IndianRupee} label="Market price" value={price(data.averageMarketPrice)} helper={data.averageMarketPrice == null ? 'No reliable local benchmark' : 'Average local benchmark'} />
     </div>
   )
 }

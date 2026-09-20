@@ -8,21 +8,30 @@ function level(score) {
 }
 
 export default function KeyInsights({ data }) {
-  const best = data.topOpportunities?.[0]
-  const bullets = [
-    best
-      ? `${best.business_name} has the strongest opportunity signal for the selected category and area.`
-      : 'No specific business opportunity is available yet for this area.',
-    data.opportunityScore != null
-      ? `The combined opportunity score is ${Number(data.opportunityScore).toFixed(0)}/100.`
-      : 'Opportunity scoring is not available for this area yet.',
-    data.competitionScore != null
-      ? `Relative competition is ${level(data.competitionScore)} (${Number(data.competitionScore).toFixed(0)}/100).`
-      : 'Competition data is not available yet.',
-    data.localEnvironmentScore != null
-      ? `The local business environment scores ${Number(data.localEnvironmentScore).toFixed(0)}/100 and is used as supporting context.`
-      : 'Additional local business-environment context is not available for this area yet.',
-  ]
+  const bullets = []
+  const demand = data.demandScore == null ? null : Number(data.demandScore)
+  const competition = data.competitionScore == null ? null : Number(data.competitionScore)
+  const opportunity = data.opportunityScore == null ? null : Number(data.opportunityScore)
+
+  if (demand != null && competition != null) {
+    if (demand >= 70 && competition < 70) bullets.push('Demand indicators are relatively strong while competitive pressure remains below the high range.')
+    else if (competition >= 70) bullets.push('Competitive pressure is relatively high, so differentiation may require additional planning.')
+    else bullets.push(`Demand is ${level(demand)} and relative competition is ${level(competition)} for this local category.`)
+  } else if (demand != null) {
+    bullets.push(`Local demand is ${level(demand)} (${demand.toFixed(0)}/100).`)
+  }
+
+  if (opportunity != null) {
+    if (opportunity >= 70) bullets.push(`The available market indicators show a relatively strong opportunity signal at ${opportunity.toFixed(0)}/100.`)
+    else if (opportunity >= 40) bullets.push(`The available market indicators suggest a moderate opportunity; validate local demand before committing significant capital.`)
+    else bullets.push(`The available market indicators show a lower opportunity signal at ${opportunity.toFixed(0)}/100.`)
+  }
+
+  if (data.localEnvironmentScore != null) {
+    bullets.push(`The local business environment is ${level(Number(data.localEnvironmentScore))} (${Number(data.localEnvironmentScore).toFixed(0)}/100) and is used as supporting context.`)
+  }
+
+  if (!bullets.length) bullets.push('There is not enough local market data to generate a reliable insight yet.')
 
   return (
     <div className="soft-card p-5">

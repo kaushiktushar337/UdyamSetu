@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+import logging
+from typing import Any, Iterable
 
 from ml_engine.ises_service import ISESService
 
 
-# UI labels that existed in the prototype are normalized to the actual
-# business-reference categories stored by UdyamSetu.
+logger = logging.getLogger(__name__)
+
+
 CATEGORY_ALIASES = {
     "dairy": "Agriculture Allied",
     "agriculture-linked activity": "Agriculture Allied",
@@ -27,41 +29,28 @@ def canonical_category(category: str | None) -> str:
     return CATEGORY_ALIASES.get(value.lower(), value)
 
 
-def clamp(value: Any, low: float = 0.0, high: float = 100.0) -> float:
-    try:
-        return max(low, min(high, float(value)))
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def weighted_average(values: list[tuple[Any, Any]]) -> float | None:
-    """Weighted average using a positive business-count weight when available."""
-    clean: list[tuple[float, float]] = []
-    for value, weight in values:
-        try:
-            v = float(value)
-        except (TypeError, ValueError):
-            continue
-        try:
-            w = float(weight)
-        except (TypeError, ValueError):
-            w = 0.0
-        if w <= 0:
-            w = 1.0
-        clean.append((v, w))
-    if not clean:
+def normalize_score(value: Any) -> float | None:
+    """Return a stored 0-100 score without hiding malformed data."""
+    if value is None:
         return None
-    total_weight = sum(w for _, w in clean)
-    return round(sum(v * w for v, w in clean) / total_weight, 2)
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not 0 <= number <= 100:
+        return None
+    return round(number, 2)
+
+
+def clamp(value: Any, low: float = 0.0, high: float = 100.0) -> float:
+    """Compatibility helper for callers outside this service."""
+    normalized = normalize_score(value)
+    if normalized is None:
+        return 0.0
+    return max(low, min(high, normalized))
 
 
 def local_environment_score(ises: dict[str, Any] | None) -> float | None:
-    """Create one explainable 0-100 local-business-environment signal.
-
-    This is deliberately a supporting signal, not a replacement for the
-    location/category market score. Missing indicators are ignored and the
-    remaining weights are renormalized.
-    """
     if not ises:
         return None
 
@@ -76,39 +65,116 @@ def local_environment_score(ises: dict[str, Any] | None) -> float | None:
         ("electricity_use_pct", 0.05, False),
         ("power_outage_pct", 0.05, True),
     ]
-
     total = 0.0
     weight_total = 0.0
     for name, weight, inverse in indicators:
-        value = ises.get(name)
+        value = normalize_score(ises.get(name))
         if value is None:
             continue
-        try:
-            score = clamp(value)
-        except (TypeError, ValueError):
-            continue
         if inverse:
-            score = 100.0 - score
-        total += score * weight
+            value = 100.0 - value
+        total += value * weight
         weight_total += weight
+    return round(total / weight_total, 2) if weight_total else None
 
-    if weight_total <= 0:
+
+def combine_opportunity(market_score: Any, environment_score: float | None) -> float | None:
+    market = normalize_score(market_score)
+    environment = normalize_score(environment_score)
+    if market is None and environment is None:
         return None
-    return round(total / weight_total, 2)
+    if market is None:
+        return environment
+    if environment is None:
+        return market
+    return round(0.75 * market + 0.25 * environment, 2)
 
 
-def combine_opportunity(asuse_score: Any, environment_score: float | None) -> float | None:
-    """Blend category opportunity with local business-environment context."""
-    if asuse_score is None and environment_score is None:
-        return None
-    if asuse_score is None:
-        return round(clamp(environment_score), 2)
-    if environment_score is None:
-        return round(clamp(asuse_score), 2)
-    return round(
-        0.75 * clamp(asuse_score) + 0.25 * clamp(environment_score),
-        2,
+def _is_verified_local_count_source(data_source: Any) -> bool:
+    """Whether a metric source is explicitly safe for a local business count.
+
+    ASUSE-derived/proxy rows in the current database are survey/population
+    metrics that have been copied into location_business_metrics but are not
+    proven to be Prayagraj/category-local counts. Summing them creates the
+    21,066,374 inflation. The synthetic prototype rows, however, are explicitly
+    generated per selected location and business profile to provide the
+    location-aware development market estimate, so they may be used as the
+    application's synthetic estimated-business metric (clearly labeled as such).
+    """
+    source = str(data_source or "").strip().casefold()
+    return (
+        "verified local" in source
+        or "location-specific" in source
+        or "synthetic prototype" in source
     )
+
+
+def aggregate_metric_rows(rows: Iterable[dict[str, Any]], fallback_competition_count: int | float | None = None) -> dict[str, Any]:
+    """Aggregate one authoritative row per subcategory without fabricating counts.
+
+    Competition count is *not* summed unless the source explicitly identifies
+    the value as a verified location-specific count. When no such market-count
+    row exists, an explicitly supplied local sector estimate (for example, the
+    ISES city-sector weighted_businesses value) may be used as a fallback.
+    """
+    rows = list(rows)
+    local_count_rows = [
+        r for r in rows
+        if r.get("competition_count") is not None
+        and _is_verified_local_count_source(r.get("data_source"))
+    ]
+    count = (
+        sum(int(r["competition_count"]) for r in local_count_rows)
+        if local_count_rows
+        else None
+    )
+    weighted = [r for r in rows if r.get("competition_count") not in (None, 0)]
+
+    def wavg(field: str) -> float | None:
+        if not weighted:
+            return None
+        values = [
+            (normalize_score(r.get(field)) if field != "average_market_price" else _number(r.get(field)), int(r["competition_count"]))
+            for r in weighted
+        ]
+        values = [(v, w) for v, w in values if v is not None]
+        if not values:
+            return None
+        total = sum(w for _, w in values)
+        return round(sum(v * w for v, w in values) / total, 2) if total else None
+
+    price_rows = [
+        (r.get("average_market_price"), int(r["competition_count"]))
+        for r in rows
+        if r.get("average_market_price") is not None and r.get("competition_count") not in (None, 0)
+    ]
+    price = None
+    if price_rows:
+        price = round(sum(float(v) * w for v, w in price_rows) / sum(w for _, w in price_rows), 2)
+
+    if count is None and fallback_competition_count is not None:
+        try:
+            fallback = float(fallback_competition_count)
+            count = int(round(fallback)) if fallback >= 0 else None
+        except (TypeError, ValueError):
+            count = None
+
+    return {
+        "competition_count": count if rows else None,
+        "demand_score": wavg("demand_score"),
+        "competition_score": wavg("competition_score"),
+        "market_opportunity_score": wavg("opportunity_score"),
+        "average_market_price": price,
+        "data_date": max((r.get("data_date") for r in rows if r.get("data_date")), default=None),
+        "metric_rows": len(rows),
+    }
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class InsightsService:
@@ -146,78 +212,130 @@ class InsightsService:
         finally:
             conn.close()
 
+    def _resolve_category_filter(self, cur, requested: str) -> tuple[str, str | None]:
+        """Resolve a top-level category or an exact reference subcategory."""
+        normalized = canonical_category(requested)
+        cur.execute(
+            """
+            SELECT MIN(category) AS business_category
+            FROM business_reference_profiles
+            WHERE LOWER(TRIM(category)) = LOWER(TRIM(%s))
+            """,
+            (normalized,),
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return str(row[0]), None
+
+        cur.execute(
+            """
+            SELECT MIN(category) AS business_category
+            FROM business_reference_profiles
+            WHERE LOWER(TRIM(subcategory)) = LOWER(TRIM(%s))
+            """,
+            (normalized,),
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return str(row[0]), normalized
+        return normalized, None
+
+    def _metric_rows(self, cur, location_id: str, category: str, subcategory: str | None = None) -> list[dict[str, Any]]:
+        """Select exactly one authoritative metric row per subcategory.
+
+        Priority is explicit: location-specific synthetic market data first for
+        the development Business Insights experience, then ASUSE-derived data
+        and profile-aligned ASUSE proxy rows only for subcategories that do
+        not have a synthetic local metric. Development seed rows are excluded.
+        """
+        cur.execute(
+            """
+            WITH ranked AS (
+                SELECT
+                    lbm.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY
+                            lbm.location_id,
+                            LOWER(lbm.business_category),
+                            LOWER(COALESCE(lbm.subcategory, ''))
+                        ORDER BY
+                            CASE
+                                WHEN LOWER(COALESCE(lbm.data_source, '')) LIKE '%%synthetic%%' THEN 1
+                                WHEN LOWER(COALESCE(lbm.data_source, '')) LIKE '%%asuse%%derived%%' THEN 2
+                                WHEN LOWER(COALESCE(lbm.data_source, '')) LIKE '%%asuse%%proxy%%' THEN 3
+                                ELSE 4
+                            END,
+                            lbm.data_date DESC NULLS LAST,
+                            lbm.updated_at DESC NULLS LAST,
+                            lbm.created_at DESC NULLS LAST
+                    ) AS rn
+                FROM location_business_metrics lbm
+                WHERE lbm.location_id = %s
+                  AND LOWER(lbm.business_category) = LOWER(%s)
+                  AND (%s IS NULL OR LOWER(COALESCE(lbm.subcategory, '')) = LOWER(%s))
+                  AND LOWER(COALESCE(lbm.data_source, '')) <> 'udyamsetu development seed'
+            )
+            SELECT
+                business_category,
+                subcategory,
+                demand_score,
+                competition_score,
+                opportunity_score,
+                competition_count,
+                average_market_price,
+                data_date,
+                data_source
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY subcategory
+            """,
+            (location_id, category, subcategory, subcategory),
+        )
+        rows = cur.fetchall()
+        logger.info(
+            "Business Insights metric selection: location_id=%s category=%s subcategory=%s rows=%s",
+            location_id, category, subcategory, len(rows),
+        )
+        return [
+            {
+                "business_category": r[0],
+                "subcategory": r[1],
+                "demand_score": r[2],
+                "competition_score": r[3],
+                "opportunity_score": r[4],
+                "competition_count": r[5],
+                "average_market_price": r[6],
+                "data_date": r[7].isoformat() if r[7] else None,
+                "data_source": r[8],
+            }
+            for r in rows
+        ]
+
     def by_location(self, location_id: str, category: str) -> dict[str, Any]:
         requested_category = (category or "").strip()
-        category = canonical_category(requested_category)
+        normalized_category = canonical_category(requested_category)
         conn = self._connect()
         if conn is None:
             raise RuntimeError("DATABASE_URL is missing")
 
         try:
             with conn.cursor() as cur:
-                # First, get one row per subcategory, prioritizing the most reliable data source
-                # This prevents double-counting when multiple data sources exist for the same subcategory
-                cur.execute(
-                    """
-                    SELECT
-                        business_category,
-                        subcategory,
-                        demand_score,
-                        competition_score,
-                        opportunity_score,
-                        competition_count,
-                        average_market_price,
-                        data_date
-                    FROM (
-                        SELECT
-                            business_category,
-                            subcategory,
-                            demand_score,
-                            competition_score,
-                            opportunity_score,
-                            competition_count,
-                            average_market_price,
-                            data_date,
-                            ROW_NUMBER() OVER (
-                                PARTITION BY subcategory
-                                ORDER BY
-                                    CASE
-                                        WHEN data_source = 'UdyamSetu synthetic prototype dataset' THEN 1
-                                        WHEN data_source = 'ASUSE 2023-24 profile-aligned proxy' THEN 2
-                                        WHEN data_source = 'ASUSE 2023-24 derived' THEN 3
-                                        ELSE 4
-                                    END
-                            ) as rn
-                        FROM location_business_metrics
-                        WHERE location_id = %s
-                          AND LOWER(business_category) = LOWER(%s)
-                          AND COALESCE(data_source, '') <> 'UdyamSetu development seed'
-                    ) ranked
-                    WHERE rn = 1
-                    """,
-                    (location_id, category),
+                resolved_category, resolved_subcategory = self._resolve_category_filter(
+                    cur, normalized_category
                 )
-
-                # Now compute weighted averages from the deduplicated subcategory data
-                # One row per subcategory exists after deduplication.
-                # Aggregate them using estimated business count instead of a
-                # simple AVG, which prevents a small subcategory from having
-                # the same influence as a large one.
-                subcategory_rows = cur.fetchall()
-
-                if not subcategory_rows:
-                    # No data found for this location/category combination
+                metric_rows = self._metric_rows(
+                    cur, location_id, resolved_category, resolved_subcategory
+                )
+                if not metric_rows:
                     return {
+                        "available": False,
                         "location_id": str(location_id),
-                        "location_name": None,
-                        "state": None,
-                        "district": None,
-                        "category": requested_category or category,
-                        "normalized_category": category,
+                        "category": requested_category or normalized_category,
+                        "normalized_category": normalized_category,
                         "demand_score": None,
                         "competition_score": None,
                         "market_score": None,
-                        "competition_count": 0,
+                        "competition_count": None,
                         "average_market_price": None,
                         "opportunity_score": None,
                         "market_opportunity_score": None,
@@ -227,58 +345,7 @@ class InsightsService:
                         "top_opportunities": [],
                     }
 
-                # Compute weighted aggregates
-                total_competition_count = sum(float(row[5]) for row in subcategory_rows if row[5] is not None)
-                weighted_demand_sum = sum(
-                    float(row[2]) * float(row[5]) if row[2] is not None and row[5] is not None else 0
-                    for row in subcategory_rows
-                )
-                weighted_competition_sum = sum(
-                    float(row[3]) * float(row[5]) if row[3] is not None and row[5] is not None else 0
-                    for row in subcategory_rows
-                )
-                weighted_opportunity_sum = sum(
-                    float(row[4]) * float(row[5]) if row[4] is not None and row[5] is not None else 0
-                    for row in subcategory_rows
-                )
-
-                # For average market price, we only weight by subcategories that have price data
-                price_rows = [row for row in subcategory_rows if row[6] is not None]
-                total_price_weight = sum(float(row[5]) for row in price_rows if row[5] is not None)
-                weighted_price_sum = sum(
-                    float(row[6]) * float(row[5]) if row[6] is not None and row[5] is not None else 0
-                    for row in price_rows
-                )
-
-                demand_score = (
-                    weighted_demand_sum / total_competition_count
-                    if total_competition_count > 0 else None
-                )
-                competition_score = (
-                    weighted_competition_sum / total_competition_count
-                    if total_competition_count > 0 else None
-                )
-                opportunity_score = (
-                    weighted_opportunity_sum / total_competition_count
-                    if total_competition_count > 0 else None
-                )
-                average_market_price = (
-                    weighted_price_sum / total_price_weight
-                    if total_price_weight > 0 else None
-                )
-
-                data_date = max((r[7] for r in subcategory_rows if r[7] is not None), default=None)
-
-                if not subcategory_rows:
-                    return {
-                        "available": False,
-                        "category": requested_category or category,
-                        "normalized_category": category,
-                        "message": "No location-specific market metrics are available for this category yet.",
-                    }
-
-                # The local environment is supporting context. It affects the
-                # opportunity score, but never replaces demand or competition.
+                normalized_category = resolved_category
                 cur.execute(
                     """
                     SELECT location_name, state, district
@@ -290,62 +357,70 @@ class InsightsService:
                 )
                 loc = cur.fetchone()
 
-                ises_context = None
                 try:
                     ises_context = ISESService(self.database_url).get_for_location(
-                        location_id,
-                        category,
+                        location_id, normalized_category
                     )
                 except Exception:
-                    # ISES is supplementary. A missing ISES row must never make
-                    # the core location/category insights unavailable.
+                    logger.exception(
+                        "ISES lookup failed: location_id=%s category=%s",
+                        location_id, normalized_category,
+                    )
                     ises_context = None
 
-                environment_score = local_environment_score(ises_context)
+                ises_business_count = None
+                if ises_context and ises_context.get("weighted_businesses") is not None:
+                    try:
+                        ises_business_count = float(ises_context["weighted_businesses"])
+                    except (TypeError, ValueError):
+                        ises_business_count = None
 
-                # Retrieve all subcategory metrics first, then collapse duplicate
-                # business names. The reference dataset contains some repeated
-                # names across profiles; showing them twice is not useful to the user.
-                # We use the same deduplication logic as above to avoid double-counting
-                # due to multiple data sources per subcategory.
+                aggregate = aggregate_metric_rows(
+                    metric_rows,
+                    fallback_competition_count=ises_business_count,
+                )
+                competition_count_source = (
+                    "verified local market metric"
+                    if any(_is_verified_local_count_source(r.get("data_source")) for r in metric_rows)
+                    else ("ISES city-sector weighted business estimate" if ises_business_count is not None else None)
+                )
+                logger.info(
+                    "Business Insights aggregate: location_id=%s category=%s metric_rows=%s competition_count=%s source=%s demand=%s competition=%s market_opportunity=%s price=%s",
+                    location_id, normalized_category, aggregate["metric_rows"],
+                    aggregate["competition_count"], competition_count_source, aggregate["demand_score"],
+                    aggregate["competition_score"], aggregate["market_opportunity_score"],
+                    aggregate["average_market_price"],
+                )
+
+                environment_score = local_environment_score(ises_context)
+                market_opportunity = aggregate["market_opportunity_score"]
+                combined_opportunity = combine_opportunity(market_opportunity, environment_score)
+
+                market_score = None
+                demand_score = aggregate["demand_score"]
+                competition_score = aggregate["competition_score"]
+                if demand_score is not None and competition_score is not None and combined_opportunity is not None:
+                    market_score = round(
+                        0.40 * demand_score
+                        + 0.25 * (100.0 - competition_score)
+                        + 0.35 * combined_opportunity,
+                        2,
+                    )
+
+                # Exact category/subcategory matching prevents a category-wide
+                # metric from multiplying against every profile in the category.
                 cur.execute(
                     """
-                    WITH deduplicated_metrics AS (
+                    WITH unique_profiles AS (
                         SELECT
-                            business_category,
-                            subcategory,
-                            demand_score,
-                            competition_score,
-                            opportunity_score,
-                            competition_count,
-                            average_market_price,
-                            data_date
-                        FROM (
-                            SELECT
-                                business_category,
-                                subcategory,
-                                demand_score,
-                                competition_score,
-                                opportunity_score,
-                                competition_count,
-                                average_market_price,
-                                data_date,
-                                ROW_NUMBER() OVER (
-                                    PARTITION BY subcategory
-                                    ORDER BY
-                                        CASE
-                                            WHEN data_source = 'UdyamSetu synthetic prototype dataset' THEN 1
-                                            WHEN data_source = 'ASUSE 2023-24 profile-aligned proxy' THEN 2
-                                            WHEN data_source = 'ASUSE 2023-24 derived' THEN 3
-                                            ELSE 4
-                                        END
-                                ) as rn
-                            FROM location_business_metrics
-                            WHERE location_id = %s
-                              AND LOWER(business_category) = LOWER(%s)
-                              AND COALESCE(data_source, '') <> 'UdyamSetu development seed'
-                        ) ranked
-                        WHERE rn = 1
+                            LOWER(TRIM(category)) AS category_key,
+                            LOWER(TRIM(COALESCE(subcategory, ''))) AS subcategory_key,
+                            MIN(business_name) AS business_name,
+                            MIN(subcategory) AS subcategory
+                        FROM business_reference_profiles
+                        WHERE LOWER(TRIM(category)) = LOWER(TRIM(%s))
+                          AND (%s IS NULL OR LOWER(TRIM(COALESCE(subcategory, ''))) = LOWER(TRIM(%s)))
+                        GROUP BY 1,2
                     )
                     SELECT
                         p.business_name,
@@ -353,74 +428,71 @@ class InsightsService:
                         m.opportunity_score,
                         m.demand_score,
                         m.competition_score,
-                        m.competition_count
-                    FROM deduplicated_metrics m
-                    JOIN business_reference_profiles p
-                      ON LOWER(p.category) = LOWER(m.business_category)
-                     AND (
-                          LOWER(COALESCE(p.subcategory, '')) = LOWER(COALESCE(m.subcategory, ''))
-                          OR m.subcategory IS NULL
-                          OR p.subcategory IS NULL
-                     )
+                        m.competition_count,
+                        m.data_source
+                    FROM unique_profiles p
+                    JOIN (
+                        SELECT *
+                        FROM (
+                            SELECT
+                                lbm.*,
+                                ROW_NUMBER() OVER (
+                                    PARTITION BY LOWER(COALESCE(lbm.subcategory, ''))
+                                    ORDER BY
+                                        CASE
+                                            WHEN LOWER(COALESCE(lbm.data_source, '')) LIKE '%%asuse%%derived%%' THEN 1
+                                            WHEN LOWER(COALESCE(lbm.data_source, '')) LIKE '%%asuse%%proxy%%' THEN 2
+                                            WHEN LOWER(COALESCE(lbm.data_source, '')) LIKE '%%synthetic%%' THEN 3
+                                            ELSE 4
+                                        END,
+                                        lbm.data_date DESC NULLS LAST,
+                                        lbm.updated_at DESC NULLS LAST,
+                                        lbm.created_at DESC NULLS LAST
+                                ) AS rn
+                            FROM location_business_metrics lbm
+                            WHERE lbm.location_id = %s
+                              AND LOWER(lbm.business_category) = LOWER(%s)
+                              AND lbm.subcategory IS NOT NULL
+                              AND (%s IS NULL OR LOWER(TRIM(lbm.subcategory)) = LOWER(TRIM(%s)))
+                              AND LOWER(COALESCE(lbm.data_source, '')) <> 'udyamsetu development seed'
+                        ) ranked
+                        WHERE rn = 1
+                    ) m
+                      ON LOWER(TRIM(COALESCE(m.subcategory, ''))) = p.subcategory_key
                     ORDER BY m.opportunity_score DESC NULLS LAST,
                              m.demand_score DESC NULLS LAST,
                              p.business_name
                     """,
-                    (location_id, category),
+                    (normalized_category, resolved_subcategory, resolved_subcategory, location_id, normalized_category, resolved_subcategory, resolved_subcategory),
                 )
 
-                unique: dict[str, dict[str, Any]] = {}
+                opportunities = []
+                seen_names: set[str] = set()
                 for r in cur.fetchall():
                     name = str(r[0]).strip()
                     key = name.casefold()
-                    if not name:
+                    if not name or key in seen_names:
                         continue
-                    combined = combine_opportunity(r[2], environment_score)
-                    candidate = {
-                        "business_name": name,
-                        "subcategory": r[1],
-                        "opportunity_score": combined,
-                        "market_opportunity_score": clamp(r[2]) if r[2] is not None else None,
-                        "demand_score": clamp(r[3]) if r[3] is not None else None,
-                        "competition_score": clamp(r[4]) if r[4] is not None else None,
-                        "competition_count": int(r[5]) if r[5] is not None else None,
-                    }
-                    previous = unique.get(key)
-                    if previous is None or (
-                        candidate["opportunity_score"] or 0
-                    ) > (previous["opportunity_score"] or 0):
-                        unique[key] = candidate
-
-                opportunities = sorted(
-                    unique.values(),
-                    key=lambda item: (
-                        item["opportunity_score"] is not None,
-                        item["opportunity_score"] or 0,
-                        item["demand_score"] or 0,
-                    ),
-                    reverse=True,
-                )[:5]
-
-                # These values come from the already-deduplicated and weighted
-                # subcategory metrics above. The previous implementation still
-                # referenced `row` from an older GROUP BY query that no longer
-                # exists, which caused: NameError: name 'row' is not defined.
-                asuse_opportunity = opportunity_score
-                combined_category_opportunity = combine_opportunity(
-                    asuse_opportunity,
-                    environment_score,
-                )
-                demand_score = clamp(demand_score) if demand_score is not None else None
-                competition_score = clamp(competition_score) if competition_score is not None else None
-                market_score = None
-                if demand_score is not None and competition_score is not None and combined_category_opportunity is not None:
-                    # Competition is a pressure score, so its inverse is used.
-                    market_score = round(
-                        0.40 * demand_score
-                        + 0.25 * (100.0 - competition_score)
-                        + 0.35 * combined_category_opportunity,
-                        2,
+                    seen_names.add(key)
+                    opportunities.append(
+                        {
+                            "business_name": name,
+                            "subcategory": r[1],
+                            "opportunity_score": combine_opportunity(r[2], environment_score),
+                            "market_opportunity_score": normalize_score(r[2]),
+                            "demand_score": normalize_score(r[3]),
+                            "competition_score": normalize_score(r[4]),
+                            "competition_count": (
+                                int(r[5])
+                                if r[5] is not None and _is_verified_local_count_source(r[6])
+                                else (
+                                    int(round(ises_business_count))
+                                    if ises_business_count is not None else None
+                                )
+                            ),
+                        }
                     )
+                opportunities = opportunities[:5]
 
                 return {
                     "available": True,
@@ -430,19 +502,19 @@ class InsightsService:
                         "state": loc[1] if loc else None,
                         "district": loc[2] if loc else None,
                     },
-                    "category": requested_category or category,
-                    "normalized_category": category,
+                    "category": requested_category or normalized_category,
+                    "normalized_category": normalized_category,
                     "demand_score": demand_score,
                     "competition_score": competition_score,
                     "market_score": market_score,
-                    "competition_count": int(round(total_competition_count)) if total_competition_count is not None else None,
-                    # Only return a price when an actual metric row supplied it.
-                    "average_market_price": float(average_market_price) if average_market_price is not None else None,
-                    "opportunity_score": combined_category_opportunity,
-                    "market_opportunity_score": clamp(asuse_opportunity) if asuse_opportunity is not None else None,
+                    "competition_count": aggregate["competition_count"],
+                    "competition_count_source": competition_count_source,
+                    "average_market_price": aggregate["average_market_price"],
+                    "opportunity_score": combined_opportunity,
+                    "market_opportunity_score": market_opportunity,
                     "local_environment_score": environment_score,
-                    "data_date": data_date.isoformat() if hasattr(data_date, "isoformat") else (str(data_date) if data_date else None),
-                    "metric_rows": len(subcategory_rows),
+                    "data_date": aggregate["data_date"],
+                    "metric_rows": aggregate["metric_rows"],
                     "top_opportunities": opportunities,
                 }
         finally:

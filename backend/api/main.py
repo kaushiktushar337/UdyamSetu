@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,8 @@ from .insights_service import InsightsService
 from .location_service import LocationService
 from .schemas import AnalyzeRequest, AnalyzeResponse
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / '.env')
@@ -321,6 +324,7 @@ def create_app(service: UdyamSetuDecisionService | None = None) -> FastAPI:
         except HTTPException:
             raise
         except Exception as exc:
+            logger.exception("Business Insights request failed")
             raise HTTPException(status_code=503, detail=f"Insights unavailable: {exc}") from exc
 
     def _build_context(request: AnalyzeRequest) -> UserBusinessContext:
