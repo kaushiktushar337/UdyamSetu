@@ -38,6 +38,11 @@ class FakeCursor:
                 ("Bakery Products Unit", "Bakery", 78, 70, 36, 450),
                 ("Spice Processing", "Spice Processing", 75, 69, 40, 300),
             ]
+        if "ROW_NUMBER() OVER" in self.sql and "location_business_metrics" in self.sql:
+            return [
+                ("Food Processing", "Bakery", 70, 40, 76, 500, None, "2024-03-31"),
+                ("Food Processing", "Spice Processing", 70, 40, 76, 500, None, "2024-03-31"),
+            ]
         return []
 
     def __enter__(self):

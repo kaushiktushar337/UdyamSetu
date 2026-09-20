@@ -401,13 +401,17 @@ class InsightsService:
                     reverse=True,
                 )[:5]
 
-                asuse_opportunity = row[5]
+                # These values come from the already-deduplicated and weighted
+                # subcategory metrics above. The previous implementation still
+                # referenced `row` from an older GROUP BY query that no longer
+                # exists, which caused: NameError: name 'row' is not defined.
+                asuse_opportunity = opportunity_score
                 combined_category_opportunity = combine_opportunity(
                     asuse_opportunity,
                     environment_score,
                 )
-                demand_score = clamp(row[2]) if row[2] is not None else None
-                competition_score = clamp(row[3]) if row[3] is not None else None
+                demand_score = clamp(demand_score) if demand_score is not None else None
+                competition_score = clamp(competition_score) if competition_score is not None else None
                 market_score = None
                 if demand_score is not None and competition_score is not None and combined_category_opportunity is not None:
                     # Competition is a pressure score, so its inverse is used.
@@ -431,15 +435,14 @@ class InsightsService:
                     "demand_score": demand_score,
                     "competition_score": competition_score,
                     "market_score": market_score,
-                    "competition_count": int(round(float(row[1]))) if row[1] is not None else None,
-                    # There is no verified local product-price field in the
-                    # current market dataset, so never invent a price.
-                    "average_market_price": float(row[4]) if row[4] is not None else None,
+                    "competition_count": int(round(total_competition_count)) if total_competition_count is not None else None,
+                    # Only return a price when an actual metric row supplied it.
+                    "average_market_price": float(average_market_price) if average_market_price is not None else None,
                     "opportunity_score": combined_category_opportunity,
                     "market_opportunity_score": clamp(asuse_opportunity) if asuse_opportunity is not None else None,
                     "local_environment_score": environment_score,
-                    "data_date": row[6].isoformat() if row[6] else None,
-                    "metric_rows": int(row[7]),
+                    "data_date": data_date.isoformat() if hasattr(data_date, "isoformat") else (str(data_date) if data_date else None),
+                    "metric_rows": len(subcategory_rows),
                     "top_opportunities": opportunities,
                 }
         finally:
